@@ -1,29 +1,44 @@
 using LinearAlgebra
 
+struct Index
+	tag::String
+	plev::Int
+end
+
+Index(ind::Index) = Index(ind.tag, ind.plev)
+Index(t::Tuple{String, Int}) = Index(t[1], t[2])
+
 struct LurTensor{T<:Number, N} <: AbstractArray{T, N}
 	arr::AbstractArray{T, N}
-	tags::Vector{String}
-	plevs::Vector{Int}
+	inds::Vector{Index}
 
-	function LurTensor(arr::AbstractArray{T, N}, tags::Vector{String}, plevs::Vector{Int}) where {T, N}
-		if length(tags) != N 
-			error("Dimension of array and length of tags not match")
-		elseif 0 in length.(tags)
-			error("Some of tags are empty string")
-		elseif length(plevs) != N
-			error("Dimension of array and length of plevs not match")
-		end
-		new{T, N}(arr, tags, plevs)
+	function LurTensor(arr::AbstractArray{T, N}, inds::Vector{Index}) where {T, N}
+		new{T, N}(arr, inds)
 	end
 end
 
+LurTensor(arr::AbstractArray, inds::Vector{Tuple{String, Int}}) = LurTensor(arr, [Index(t, p) for (t, p) in inds])
+
+function LurTensor(arr::AbstractArray{T, N}, tags::Vector{String}, plevs::Vector{Int}) where {T, N}
+	if length(tags) != N 
+		error("Dimension of array and length of tags not match")
+	elseif 0 in length.(tags)
+		error("Some of tags are empty string")
+	elseif length(plevs) != N
+		error("Dimension of array and length of plevs not match")
+	end
+	LurTensor(arr, collect(zip(tags, plevs)))
+end
+
+LurTensor(arr::AbstractArray{T, N}, tags::Vararg{String}) where {T, N} = LurTensor(arr, collect(tags), [0 for _=1:N])
+LurTensor(arr::AbstractArray{T, N}, tags::Vector{String}) where {T, N} = LurTensor(arr, tags, [0 for _=1:N])
 LurTensor(x::Number) = LurTensor([x], ["Null"])
 
 function showDim(io::IO, LT::LurTensor{T, N}) where {T, N}
 	sz = size(LT)
 	println("\t\tSize\tplev\ttag")
 	for d=1:N	
-		println("Dim $(d) : \t$(sz[d]) \t$(LT.plevs[d]) \t$(LT.tags[d])")
+		println("Dim $(d) : \t$(sz[d]) \t$(LT.inds[d].plev) \t$(LT.inds[d].tag)")
 	end
 end
 
@@ -43,9 +58,8 @@ LurTensor(arr::AbstractArray{T, N}, tags) where {T, N} = LurTensor(arr, tags, [0
 
 function LurTensor(LT::LurTensor{T, N}, I...) where {T, N}
 	new_arr = getindex(LT.arr, I...)
-	new_tags = [LT.tags[i] for i=1:N if !(I[i] isa Integer)]
-	new_plevs = [LT.plevs[i] for i=1:N if !(I[i] isa Integer)]
-	LurTensor(new_arr, new_tags, new_plevs)
+	new_inds = [LT.inds[i] for i=1:N if !(I[i] isa Integer)]
+	LurTensor(new_arr, new_inds)
 end
 
 Base.similar(LT::LurTensor{T, N}) where {N, T} = LurTensor(zeros(T, size(LT)...), LT.tags, LT.plevs)
@@ -70,7 +84,7 @@ Base.BroadcastStyle(::Type{<:LurTensor}) = Broadcast.ArrayStyle{LurTensor}()
 
 function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{LurTensor}}, ::Type{ElType}) where ElType
 	A = find_aac(bc)
-	LurTensor(similar(Array{ElType}, axes(bc)), A.tags, A.plevs)
+	LurTensor(similar(Array{ElType}, axes(bc)), A.inds)
 end
 
 find_aac(bc::Base.Broadcast.Broadcasted) = find_aac(bc.args)
@@ -81,7 +95,7 @@ find_aac(a::LurTensor, rest) = a
 find_aac(::Any, rest) = find_aac(rest)
 
 # Copy LurTensor object
-Base.copy(LT::LurTensor) = LurTensor(Base.copy(LT.arr), Base.copy(LT.tags), Base.copy(LT.plevs))
+Base.copy(LT::LurTensor) = LurTensor(Base.copy(LT.arr), Base.copy(LT.inds))
 
 # Add condition to modify functions below
 cond_kwargs = (tag=nothing, plev=nothing)
@@ -92,7 +106,7 @@ function cd(kw)
 		if !(k in (:tag, :plev)) error("Keyword argument $(k) is not supported") end
 	end
 	t = get(kw, :tag, nothing); p = get(kw, :plev, nothing)
-	(lt, lp) -> check(lt, t) && check(lp, p)
+	(ind::Index) -> check(ind.tag, t) && check(ind.plev, p)
 end
 
 check(tag::String, str::String) = all(x -> x in split(tag, ','), split(str, ','))
@@ -100,50 +114,60 @@ check(plev::Int, i::Int) = plev == i
 check(::Any, ::Nothing) = true
 
 # Change tags
-function remove_tag(tag::String, str; check_empty=true)
-	tag_split = split(tag, ',')
+function remove_tag(ind::Index, str; check_empty=true)
+	tag_split = split(ind.tag, ',')
 	for s in split(str, ',') 
 		filter!(e->e!=s, tag_split)
 	end
 	if check_empty && length(tag_split) == 0
 		error("Empty tag is not allowed")
 	end
-	return join(tag_split, ',')
+	return Index(join(tag_split, ','), ind.plev)
 end
 
-set_tag(tag::String, str) = set_tag(tag, str, Val(length(str)))
-set_tag(tag::String, str, ::Val{0}) = error("Empty tag is not allowed")
-set_tag(tag::String, str, ::Any) = str
+function remove_dup(str::String)
+	splitted = split(str, ','); result = Vector{String}()
+	for a in splitted
+		if a in result
+			push!(result, a)
+		end
+	end
+	return join(splitted, ',')
+end
 
-function add_tag(tag::String, str::String)
-	tag_split = split(tag, ',')
+set_tag(ind::Index, str) = set_tag(ind, str, Val(length(str)))
+set_tag(ind::Index, str, ::Val{0}) = error("Empty tag is not allowed")
+set_tag(ind::Index, str, ::Any) = Index(remove_dup(str), ind.plev)
+
+function add_tag(ind::Index, str::String)
+	tag = ind.tag; tag_split = split(tag, ',')
 	for s in split(str, ',')
 		if !(s in tag_split)
 			tag *= ',' * s 
 		end
 	end
-	return tag
+	return Index(tag, ind.plev)
 end
 
-replace_tag(tag::String, s1, s2) = replace_tag(tag, s1, s2, Val(check(tag, s1)))
-replace_tag(tag::String, s1, s2, ::Val{true}) = add_tag(remove_tag(tag, s1; check_empty=false), s2)
-replace_tag(tag::String, s1, s2, ::Val{false}) = tag
+replace_tag(ind::Index, s1, s2) = replace_tag(ind, s1, s2, Val(check(ind.tag, s1)))
+replace_tag(ind::Index, s1, s2, ::Val{true}) = add_tag(remove_tag(ind, s1; check_empty=false), s2)
+replace_tag(ind::Index, s1, s2, ::Val{false}) = ind
 
-swap_tag(tag::String, s1, s2) = swap_tag(tag::String, s1, s2, Val(check(tag, s1)), Val(check(tag, s2)))
-swap_tag(tag::String, s1, s2, ::Val{true}, ::Val{false}) = replace_tag(tag, s1, s2, Val(true))
-swap_tag(tag::String, s1, s2, ::Val{false}, ::Val{true}) = replace_tag(tag, s2, s1, Val(true))
-swap_tag(tag::String, s1, s2, ::Any, ::Any) = tag
+swap_tag(ind::Index, s1, s2) = swap_tag(ind, s1, s2, Val(check(ind.tag, s1)), Val(check(ind.tag, s2)))
+swap_tag(ind::Index, s1, s2, ::Val{true}, ::Val{false}) = replace_tag(ind, s1, s2, Val(true))
+swap_tag(ind::Index, s1, s2, ::Val{false}, ::Val{true}) = replace_tag(ind, s2, s1, Val(true))
+swap_tag(ind::Index, s1, s2, ::Any, ::Any) = ind
 
-map_prime(plev, plold, plnew) = (plev == plold) ? plnew : plev
-swap_prime(plev, pl1, pl2) = (plev == pl1) ? pl2 : (plev == pl2) ? pl1 : plev
+map_prime(ind, plold, plnew) = Index(ind.tag, (ind.plev == plold) ? plnew : ind.plev)
+swap_prime(ind, pl1, pl2) = Index(ind.tag, (ind.plev == pl1) ? pl2 : (ind.plev == pl2) ? pl1 : ind.plev)
 
 
 # Modify tags of LurTensor object (Inplace version)
-addtags!(LT::LurTensor, str; kw...) = modify!(LT, add_tag, :tags, cd(kw), str)
-removetags!(LT::LurTensor, str; kw...) = modify!(LT, remove_tag, :tags, cd(kw), str)
-settags!(LT::LurTensor, str; kw...) = modify!(LT, set_tag, :tags, cd(kw), str)
-replacetags!(LT::LurTensor, s1, s2; kw...) = modify!(LT, replace_tag, :tags, cd(kw), s1, s2)
-swaptags!(LT::LurTensor, s1, s2; kw...) = modify!(LT, swap_tag, :tags, cd(kw), s1, s2)
+addtags!(LT::LurTensor, str; kw...) = modify!(LT, add_tag, cd(kw), str)
+removetags!(LT::LurTensor, str; kw...) = modify!(LT, remove_tag, cd(kw), str)
+settags!(LT::LurTensor, str; kw...) = modify!(LT, set_tag, cd(kw), str)
+replacetags!(LT::LurTensor, s1, s2; kw...) = modify!(LT, replace_tag, cd(kw), s1, s2)
+swaptags!(LT::LurTensor, s1, s2; kw...) = modify!(LT, swap_tag, cd(kw), s1, s2)
 
 # Modify tags of LurTensor object (Copy version)
 removetags(LT::LurTensor, str; kw...) = modify(removetags!, LT, str; kw...)
@@ -153,11 +177,11 @@ replacetags(LT::LurTensor, str1, str2; kw...) = modify(replacetags!, LT, str1, s
 swaptags(LT::LurTensor, str1, str2; kw...) = modify(swaptags!, LT, str1, str2; kw...)
 
 # Modify plevs of LurTensor object (Inplace version)
-prime!(LT::LurTensor, plinc::Int = 1; kw...) = modify!(LT, (p, pl) -> max(0, p + pl), :plevs, cd(kw), plinc)
-setprime!(LT::LurTensor, plev::Int; kw...) = modify!(LT, (_, pl) -> max(0, pl), :plevs, cd(kw), plev)
-noprime!(LT::LurTensor; kw...) = modify!(LT, (_) -> 0, :plevs, cd(kw))
-mapprime!(LT::LurTensor, plold::Int, plnew::Int; kw...) = modify!(LT, map_prime, :plevs, cd(kw), plold, plnew)
-swapprime!(LT::LurTensor, pl1::Int, pl2::Int; kw...) = modify!(LT, swap_prime, :plevs, cd(kw), pl1, pl2)
+prime!(LT::LurTensor, plinc::Int = 1; kw...) = modify!(LT, (ind, pl) -> Index(ind.tag, max(0, ind.plev + pl)), cd(kw), plinc)
+setprime!(LT::LurTensor, plev::Int; kw...) = modify!(LT, (ind, pl) -> Index(ind.tag, max(0, pl)), cd(kw), plev)
+noprime!(LT::LurTensor; kw...) = modify!(LT, (ind) -> Index(ind.tag, 0), cd(kw))
+mapprime!(LT::LurTensor, plold::Int, plnew::Int; kw...) = modify!(LT, map_prime, cd(kw), plold, plnew)
+swapprime!(LT::LurTensor, pl1::Int, pl2::Int; kw...) = modify!(LT, swap_prime, cd(kw), pl1, pl2)
 
 # Modify plevs of LurTensor object(Copy version)
 prime(LT::LurTensor, plinc::Int = 1; kw...) = modify(prime!, LT, plinc; kw...)
@@ -168,11 +192,10 @@ swapprime(LT::LurTensor, pl1::Int, pl2::Int; kw...) = modify(swapprime!, LT, pl1
 
 modify(ft, LT::LurTensor, arg...; kw...) = (LT2 = copy(LT); ft(LT2, arg...; kw...))
 
-function modify!(LT::LurTensor{T, N}, ft::Function, fn, cond_ft, arg...) where {T, N} 
+function modify!(LT::LurTensor{T, N}, ft::Function, cond_ft, arg...) where {T, N} 
 	for i=1:N
-		tag, plev = LT.tags[i], LT.plevs[i]
-		if cond_ft(tag, plev)
-			getfield(LT, fn)[i] = ft(getfield(LT, fn)[i], arg...)
+		if cond_ft(LT.inds[i])
+			LT.inds[i] = ft(LT.inds[i], arg...)
 		end
 	end
 	return LT
@@ -184,32 +207,34 @@ permute_vec(v::Vector, vi::Vector{Int}) = [v[vi[i]] for i=1:length(vi)]
 
 function Base.permutedims(LT::LurTensor{T, N}, perm) where {T, N}
 	new_arr = permutedims(LT.arr, perm)
-	new_tags, new_plevs = permute_vec(LT.tags, perm), permute_vec(LT.plevs, perm)
-	return LurTensor(new_arr, new_tags, new_plevs)
+	new_inds = permute_vec(LT.inds, perm)
+	return LurTensor(new_arr, new_inds)
 end
 
 # Contract
 Base.sort(tag::String) = join(sort(split(tag, ',')), ',')
 
+
+
 function get_contract_info(inds)
-	inds_tag_sorted = [(sort(t), p) for (t, p) in inds]
-	elem_count = Dict{Tuple{String, Int}, Vector{Int}}()
-	for (i, pair) in enumerate(inds_tag_sorted)
-		if pair in keys(elem_count)
-			push!(elem_count[pair], i)
+	inds_tag_sorted = [Index(sort(ind.tag), ind.plev) for ind in inds]
+	elem_count = Dict{Index, Vector{Int}}()
+	for (i, ind) in enumerate(inds_tag_sorted)
+		if ind in keys(elem_count)
+			push!(elem_count[ind], i)
 		else
-			elem_count[pair] = [i]
+			elem_count[ind] = [i]
 		end
 	end
 	raxis, caxis1, caxis2 = Vector{Int}(), Vector{Int}(), Vector{Int}()
 	
-	for pair in keys(elem_count)
-		if length(elem_count[pair]) > 2
-			error("There are three (or more) axes with same tag and plev")
-		elseif length(elem_count[pair]) == 2
-			i, j = elem_count[pair]; push!(caxis1, i); push!(caxis2, j)
+	for ind in keys(elem_count)
+		if length(elem_count[ind]) > 2
+			error("There are three (or more) Index objects with same tag and plev")
+		elseif length(elem_count[ind]) == 2
+			i, j = elem_count[ind]; push!(caxis1, i); push!(caxis2, j)
 		else
-			push!(raxis, elem_count[pair][1])
+			push!(raxis, elem_count[ind][1])
 		end
 	end
 	return sort(raxis), caxis1, caxis2, length(caxis1)
@@ -230,8 +255,7 @@ mult(arr1::Vector, arr2) = transpose(transpose(arr1) * arr2)
 mult(arr1::Vector, arr2::Vector) = transpose(arr1) * arr2
 
 function contract(LT::LurTensor)
-	axis_props = collect(zip(LT.tags, LT.plevs))	
-	raxis, caxis1, caxis2, nc = get_contract_info(axis_props)
+	raxis, caxis1, caxis2, nc = get_contract_info(LT.inds)
 	sz = size(LT)
 	if length(caxis1) == 0
 		return LT
@@ -242,25 +266,23 @@ function contract(LT::LurTensor)
 	if length(raxis) == 0
 		return LurTensor(tr(arr_reshaped))
 	end
-	new_prop = permute_vec(axis_props, raxis)
+	new_inds = permute_vec(LT.inds, raxis)
 
 	output = zeros(new_dim[1])
 	for i=1:new_dim[1]
 		output[i] = tr(arr_reshaped[i, :, :])
 	end
 	output = reshape(output, sz[raxis]...)
-	LurTensor(output, map(collect, collect(zip(new_prop...)))...)
+	LurTensor(output, new_inds)
 end
 
 function contract(LT1::LurTensor, LT2::LurTensor)
-	LT1_axis = collect(zip(LT1.tags, LT1.plevs))
-	LT2_axis = collect(zip(LT2.tags, LT2.plevs))
-	axis_props = vcat(LT1_axis, LT2_axis)
-	raxis, caxis1, caxis2, nc = get_contract_info(axis_props)
-	contract(LT1.arr, LT1_axis, LT2.arr, LT2_axis, raxis, caxis1, caxis2, nc)
+	all_inds = vcat(LT1.inds, LT2.inds)
+	raxis, caxis1, caxis2, nc = get_contract_info(all_inds)
+	contract(LT1.arr, LT1.inds, LT2.arr, LT2.inds, raxis, caxis1, caxis2, nc)
 end
 
-function contract(arr1, axis1, arr2, axis2, raxis, caxis1, caxis2, nc)
+function contract(arr1, inds1, arr2, inds2, raxis, caxis1, caxis2, nc)
 	sz1, sz2 = size(arr1), size(arr2); sz = vcat(sz1..., sz2...)
 	d1, d2 = length(sz1), length(sz2)
 	permute_info = vcat(raxis[1:d1-nc], caxis1, caxis2, raxis[d1-nc+1:end])
@@ -272,12 +294,21 @@ function contract(arr1, axis1, arr2, axis2, raxis, caxis1, caxis2, nc)
 	arr1_reshaped = reshape(arr1_permuted, new_dim_l...)
 	arr2_reshaped = reshape(arr2_permuted, new_dim_r...)
 
-	new_prop = permute_vec([axis1..., axis2...], raxis)
+	new_inds = permute_vec(vcat(inds1, inds2), raxis)
 	new_sz = permute_vec(sz, raxis)
 	m = mult(arr1_reshaped, arr2_reshaped)
 	if m isa Number
 		return LurTensor(m)
 	end
 	output = reshape(m, new_sz...)
-	LurTensor(output, map(collect, collect(zip(new_prop...)))...)
+	LurTensor(output, new_inds)
+end
+
+
+qr(LT::LurTensor, dims::Vector{Int}) = qr(LT, permute_vec(LT.inds, dims))
+svd(LT::LurTensor, dims::Vector{Int}) = svd(LT, permute_vec(LT.inds, dims))
+eig(LT::LurTensor, dims::Vector{Int}) = eig(LT, permute_vec(LT.inds, dims))
+
+function qr(LT::LurTensor, inds::Vector{Index})
+
 end

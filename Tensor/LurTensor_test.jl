@@ -1,6 +1,5 @@
 include("LurTensor.jl")
 
-"""
 lur = [1 2; 3 4]
 asdf = LurTensor(lur, ["as", "aa"], [0, 0])
 println(asdf)
@@ -126,7 +125,6 @@ lt = LurTensor(a, ["a", "C", "D", "b", "b", "a"])
 show(stdout, lt, showarr=true)
 lt = contract(lt)
 show(stdout, lt, showarr=true)
-"""
 
 a = reshape(1:24, 3, 2, 4)
 l = LurTensor(a, ["B", "A", "C"])
@@ -156,15 +154,6 @@ show(stdout, l, showarr=true)
 show(stdout, r, showarr=true)
 show(stdout, c, showarr=true)
 
-a = reshape(1:24, 4, 2, 3)
-l = LurTensor(a, ["F,B", "B,A", "C,DWD"])
-b = reshape(1:24, 2, 3, 4)
-r = LurTensor(b, ["A,B", "DWD,C", "C,F"])
-c = l * r
-show(stdout, l, showarr=true)
-show(stdout, r, showarr=true)
-show(stdout, c, showarr=true)
-
 a = reshape(1:6, 2, 3)
 l = LurTensor(a, ["LUR", "LALA"])
 b = reshape(1:6, 2, 3)
@@ -174,3 +163,12 @@ show(stdout, l, showarr=true)
 show(stdout, r, showarr=true)
 show(stdout, c, showarr=true)
 
+a = reshape(1:24, 4, 2, 3)
+l = LurTensor(a, ["F,B", "B,A", "C,DWD"])
+b = reshape(1:24, 2, 3, 4)
+r = LurTensor(b, ["A,B", "DWD,C", "C,F"])
+c = l * r
+show(stdout, l, showarr=true)
+show(stdout, r, showarr=true)
+show(stdout, c, showarr=true)
+println(r.inds)
