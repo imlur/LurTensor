@@ -5,6 +5,8 @@ struct Index
 	plev::Int
 end
 
+Base.:(==)(x::Index, y::Index) = sort(x.tag) == sort(y.tag) && x.plev == y.plev
+Base.hash(i::Index) = hash((sort(i.tag), i.plev))
 Index(ind::Index) = Index(ind.tag, ind.plev)
 Index(t::Tuple{String, Int}) = Index(t[1], t[2])
 
@@ -96,6 +98,7 @@ find_aac(::Any, rest) = find_aac(rest)
 
 # Copy LurTensor object
 Base.copy(LT::LurTensor) = LurTensor(Base.copy(LT.arr), Base.copy(LT.inds))
+shallow_copy(LT::LurTensor) = LurTensor(LT.arr, Base.copy(LT.inds))
 
 # Add condition to modify functions below
 cond_kwargs = (tag=nothing, plev=nothing)
@@ -214,12 +217,9 @@ end
 # Contract
 Base.sort(tag::String) = join(sort(split(tag, ',')), ',')
 
-
-
 function get_contract_info(inds)
-	inds_tag_sorted = [Index(sort(ind.tag), ind.plev) for ind in inds]
 	elem_count = Dict{Index, Vector{Int}}()
-	for (i, ind) in enumerate(inds_tag_sorted)
+	for (i, ind) in enumerate(inds)
 		if ind in keys(elem_count)
 			push!(elem_count[ind], i)
 		else
@@ -304,6 +304,57 @@ function contract(arr1, inds1, arr2, inds2, raxis, caxis1, caxis2, nc)
 	LurTensor(output, new_inds)
 end
 
+commoninds(LT1, LT2; kw...) = inds_meet_cond(intersect, LT1, LT2; kw...)
+uniqueinds(LT1, LT2; kw...) = inds_meet_cond(setdiff, LT1, LT2; kw...)
+noncommoninds(LT1, LT2; kw...) = inds_meet_cond(symdiff, LT1, LT2; kw...)
+unioninds(LT1, LT2; kw...) = inds_meet_cond(union, LT1, LT2; kw...)
+hascommoninds(LT1, LT2; kw...) = isempty(commoninds(LT1, LT2; kw))
+hascommoninds(LT1; kw...) = (LT2) -> hascommoninds(LT1, LT2; kw...)
+
+commonind(LT1, LT2; kw...) = first_elem(commoninds(LT1, LT2; kw...))
+uniqueind(LT1, LT2; kw...) = first_elem(uniqueinds(LT1, LT2; kw...))
+noncommonind(LT1, LT2; kw...) = first_elem(noncommoninds(LT1, LT2; kw...))
+unionind(LT1, LT2; kw...) = first_elem(unioninds(LT1, LT2; kw...))
+
+# tested only for reaplceinds! function
+replaceinds!(LT::LurTensor, i1, i2) = replinds!(LT, get_map(i1, i2; bidir=false))
+swapinds!(LT::LurTensor, i1, i2) = replinds!(LT, get_map(i1, i2; bidir=true))
+
+replaceinds(LT::LurTensor, i1, i2) = replaceinds!(shallow_copy(LT), i1, i2)
+swapinds(LT::LurTensor, i1, i2) = swapinds!(shallow_copy(LT), i1, i2)
+
+
+replaceind!(LT::LurTensor, i1, i2) = replaceinds!(LT, [i1], [i2])
+swapind!(LT::LurTensor, i1, i2) = swapinds!(LT, [i1], [i2])
+
+replaceind(LT::LurTensor, i1, i2) = replaceind!(shallow_copy(LT), i1, i2)
+swapind(LT::LurTensor, i1, i2) = swapind!(shallow_copy(LT), i1, i2)
+
+
+function get_map(i1, i2; bidir=false)
+	@assert length(i1) == length(i2)
+	map = Dict{Index, Index}()
+	for i=1:length(i1)
+		map[i1[i]] = i2[i]
+		if bidir && !(i2[i] in keys(map))
+			map[i2[i]] = i1[i]
+		end
+	end
+	return map
+end
+
+function replinds!(LT::LurTensor, replace_map::Dict{Index, Index})
+	for (i, ind) in enumerate(LT.inds)
+		if ind in keys(replace_map)
+			LT.inds[i] = replace_map[ind]
+		end
+	end
+	return LT
+end
+
+
+inds_meet_cond(ft::Function, LTs::LurTensor...; kw...) = filter(x -> cd(kw)(x), ft(map(x->x.inds, LTs)...))
+first_elem(v::Vector) = isempty(v) ? nothing : v[1]
 
 qr(LT::LurTensor, dims::Vector{Int}) = qr(LT, permute_vec(LT.inds, dims))
 svd(LT::LurTensor, dims::Vector{Int}) = svd(LT, permute_vec(LT.inds, dims))
