@@ -206,8 +206,9 @@ end
 
 
 # Permutedim
-permute_vec(v::Vector, vi::Vector{Int}) = [v[vi[i]] for i=1:length(vi)]
+permute_vec(v::Vector, vi) = [v[vi[i]] for i=1:length(vi)]
 
+get_pvec(linds::Vector{Int}, ndim::Int) = vcat(linds, [i for i=1:ndim if !(i in linds)])
 function Base.permutedims(LT::LurTensor{T, N}, perm) where {T, N}
 	new_arr = permutedims(LT.arr, perm)
 	new_inds = permute_vec(LT.inds, perm)
@@ -216,6 +217,15 @@ end
 
 # Contract
 Base.sort(tag::String) = join(sort(split(tag, ',')), ',')
+function get_dim(LT::LurTensor, i::Index) 
+	d = findfirst(x -> x == i, LT.inds)
+	if d isa Nothing
+		error("There are no index $(i) in LurTensor")
+	end
+	return d
+end
+get_dim(LT::LurTensor, is::Vector{Index}) = [get_dim(LT, i) for i in is]
+
 
 function get_contract_info(inds)
 	elem_count = Dict{Index, Vector{Int}}()
@@ -360,6 +370,49 @@ qr(LT::LurTensor, dims::Vector{Int}) = qr(LT, permute_vec(LT.inds, dims))
 svd(LT::LurTensor, dims::Vector{Int}) = svd(LT, permute_vec(LT.inds, dims))
 eig(LT::LurTensor, dims::Vector{Int}) = eig(LT, permute_vec(LT.inds, dims))
 
-function qr(LT::LurTensor, inds::Vector{Index})
 
+decomp(LT, ft, linds::Index...; kw...) = decomp(LT, ft, collect(linds); kw...)
+decomp(LT, ft, linds::Vector{Index}; kw...) = decomp(LT, ft, get_dim(LT, linds); kw...)
+decomp(LT, ft, linds::Int...; kw...) = decomp(LT, ft, collect(linds); kw...)
+
+eigen(LT::LurTensor, linds...; kw...) = decomp(LT, eigen, linds...; kw...)
+qr(LT::LurTensor, linds...; kw...) = decomp(LT, LinearAlgebra.qr, linds...; kw...)
+svd(LT::LurTensor, linds...; kw...) = decomp(LT, LinearAlgebra.svd, linds...; kw...)
+eigvals(LT::LurTensor, linds...; kw...) = decomp(LT, LinearAlgebra.eigenvals, linds...; kw...)
+
+# TODO: make qr, svd, eigvals function similar to this
+eigen(mat::Matrix, ::Nothing) = (e = LinearAlgebra.eigen(mat); [e.vectors, diagm(e.values), LinearAlgebra.inv(e.vectors)])
+eigen(mat::Hermitian, ::Nothing) = (e = LinearAlgebra.eigen(mat); [e.vectors, diagm(e.values), adjoint(e.vectors)])
+
+# TODO: Add code that exploit the symmetry of target LurTensor
+# Symmetry is given by kw
+function decomp(LT, ft, linds::Vector{Int}; kw...)
+	# Reshape the array to matrix form
+	nl = length(linds); pvec = get_pvec(linds, ndims(LT))
+	LT_t = permutedims(LT, pvec); 
+	sz = size(LT_t); ls, rs = prod(sz[1:nl]), prod(sz[nl+1:end])
+	to_be_decomp = reshape(LT_t.arr, ls, rs)
+	# decompose (ft can be qr, svd, eigen...)
+	decomp_res = ft(to_be_decomp, nothing)
+	if eltype(decomp_res) <: Number
+		return decomp_res
+	end
+	
+	# reshape resultant matrices to LurTensor objects
+	lmarr, marr..., rmarr = decomp_res
+	addtag = get(kw, :addtag, ""); plev = get(kw, :plev, 0)
+	lmarr_reshaped = reshape(Matrix(lmarr), (sz[1:nl]..., size(lmarr)[end]))
+	rmarr_reshaped = reshape(Matrix(rmarr), (size(rmarr)[1], sz[nl+1:end]...))
+	mid_tags = get_mtags(String(Symbol(ft)), addtag, length(marr)) 
+	lmLT = LurTensor(lmarr_reshaped, [LT_t.inds[1:nl]..., Index(mid_tags[1], plev)])
+	rmLT = LurTensor(rmarr_reshaped, [Index(mid_tags[end], plev), LT_t.inds[nl+1:end]...])
+	mLT = [LurTensor(Matrix(arr), [mid_tags[i], mid_tags[i+1]], [plev, plev]) for (i, arr) in enumerate(marr)]
+	return [lmLT, mLT..., rmLT]
+end
+
+
+function get_mtags(ftname, addtag::String, n::Int)
+	add_tag = length(addtag) != 0
+	tags = (n == 0) ? [",bond"] : [",left", ",right"]
+	return [add_tag ? ftname*i*","*addtag : ftname*i for i in tags]
 end
