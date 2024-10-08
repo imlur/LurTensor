@@ -10,30 +10,27 @@ Base.hash(i::Index) = hash((sort(i.tag), i.plev))
 Index(ind::Index) = Index(ind.tag, ind.plev)
 Index(t::Tuple{String, Int}) = Index(t[1], t[2])
 
+to_indvec(tps::Vector{Tuple{String, Int}}) = [Index(t) for t in tps]
+to_indvec(ks::Vector{String}, ps::Vector{Int}) = to_indvec(collect(zip(ks, ps)))
+to_indvec(ks::Vector{String}) = to_indvec(ks, [0 for _=1:length(ks)])
+to_indvec(ks::String...) = to_indvec(collect(ks))
+to_indvec(inds::Index...) = collect(inds)
+
 struct LurTensor{T<:Number, N} <: AbstractArray{T, N}
 	arr::AbstractArray{T, N}
 	inds::Vector{Index}
 
 	function LurTensor(arr::AbstractArray{T, N}, inds::Vector{Index}) where {T, N}
+		if length(inds) != N
+			error("Dimension of array is not equal to number of Index objects")
+		elseif 0 in map(x -> length(x.tag), inds)
+			error("Some of tags are empty string")
+		end
 		new{T, N}(arr, inds)
 	end
 end
 
-LurTensor(arr::AbstractArray, inds::Vector{Tuple{String, Int}}) = LurTensor(arr, [Index(t, p) for (t, p) in inds])
-
-function LurTensor(arr::AbstractArray{T, N}, tags::Vector{String}, plevs::Vector{Int}) where {T, N}
-	if length(tags) != N 
-		error("Dimension of array and length of tags not match")
-	elseif 0 in length.(tags)
-		error("Some of tags are empty string")
-	elseif length(plevs) != N
-		error("Dimension of array and length of plevs not match")
-	end
-	LurTensor(arr, collect(zip(tags, plevs)))
-end
-
-LurTensor(arr::AbstractArray{T, N}, tags::Vararg{String}) where {T, N} = LurTensor(arr, collect(tags), [0 for _=1:N])
-LurTensor(arr::AbstractArray{T, N}, tags::Vector{String}) where {T, N} = LurTensor(arr, tags, [0 for _=1:N])
+LurTensor(arr::AbstractArray{T, N}, linds...) where {T, N} = LurTensor(arr, to_indvec(linds...))
 LurTensor(x::Number) = LurTensor([x], ["Null"])
 
 function showDim(io::IO, LT::LurTensor{T, N}) where {T, N}
@@ -366,23 +363,21 @@ end
 inds_meet_cond(ft::Function, LTs::LurTensor...; kw...) = filter(x -> cd(kw)(x), ft(map(x->x.inds, LTs)...))
 first_elem(v::Vector) = isempty(v) ? nothing : v[1]
 
-qr(LT::LurTensor, dims::Vector{Int}) = qr(LT, permute_vec(LT.inds, dims))
-svd(LT::LurTensor, dims::Vector{Int}) = svd(LT, permute_vec(LT.inds, dims))
-eig(LT::LurTensor, dims::Vector{Int}) = eig(LT, permute_vec(LT.inds, dims))
-
-
-decomp(LT, ft, linds::Index...; kw...) = decomp(LT, ft, collect(linds); kw...)
 decomp(LT, ft, linds::Vector{Index}; kw...) = decomp(LT, ft, get_dim(LT, linds); kw...)
 decomp(LT, ft, linds::Int...; kw...) = decomp(LT, ft, collect(linds); kw...)
+decomp(LT, ft, linds...; kw...) = decomp(LT, ft, to_indvec(linds...); kw...)
 
 eigen(LT::LurTensor, linds...; kw...) = decomp(LT, eigen, linds...; kw...)
-qr(LT::LurTensor, linds...; kw...) = decomp(LT, LinearAlgebra.qr, linds...; kw...)
-svd(LT::LurTensor, linds...; kw...) = decomp(LT, LinearAlgebra.svd, linds...; kw...)
-eigvals(LT::LurTensor, linds...; kw...) = decomp(LT, LinearAlgebra.eigenvals, linds...; kw...)
+qr(LT::LurTensor, linds...; kw...) = decomp(LT, qr, linds...; kw...)
+svd(LT::LurTensor, linds...; kw...) = decomp(LT, svd, linds...; kw...)
+eigvals(LT::LurTensor, linds...; kw...) = decomp(LT, eigvals, linds...; kw...)
 
-# TODO: make qr, svd, eigvals function similar to this
+# TODO: make methods for some classes of matrices
 eigen(mat::Matrix, ::Nothing) = (e = LinearAlgebra.eigen(mat); [e.vectors, diagm(e.values), LinearAlgebra.inv(e.vectors)])
 eigen(mat::Hermitian, ::Nothing) = (e = LinearAlgebra.eigen(mat); [e.vectors, diagm(e.values), adjoint(e.vectors)])
+qr(mat::Matrix, ::Nothing) = ((q, r) = LinearAlgebra.qr(mat); [Matrix(q), r])
+svd(mat::Matrix, ::Nothing) = ((u, s, v) = LinearAlgebra.svd(mat); [u, diagm(s), adjoint(v)])
+eigvals(mat::Matrix, ::Nothing) = LinearAlgebra.eigvals(mat)
 
 # TODO: Add code that exploit the symmetry of target LurTensor
 # Symmetry is given by kw
