@@ -1,4 +1,4 @@
-include("LurTensor.jl")
+using LinearAlgebra
 
 Val_dict = Dict("Spin" => Val(1), "Fermion" => Val(2), "FermionS" => Val(3))
 getlocalspace(space, op::Char, inds...) = getlocalspace(space, -1, op, inds...)
