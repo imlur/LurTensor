@@ -5,6 +5,8 @@ struct Index
 	plev::Int
 end
 
+const Indexable = Union{String, Tuple{String, Int}, Index}
+
 Base.:(==)(x::Index, y::Index) = sort(x.tag) == sort(y.tag) && x.plev == y.plev
 Base.hash(i::Index) = hash((sort(i.tag), i.plev))
 Base.adjoint(i::Index) = Index(i.tag, i.plev + 1)
@@ -34,6 +36,7 @@ end
 
 LurTensor(arr::AbstractArray{T, N}, linds...) where {T, N} = 
 	LurTensor(arr, to_indvec(linds...))
+LurTensor(LT::LurTensor, linds::Indexable...) = LurTensor(LT.arr, linds...)
 LurTensor(x::Number) = LurTensor([x], ["Null"])
 LurTensor() = LurTensor(0)
 
@@ -229,7 +232,8 @@ function get_dim(LT::LurTensor, i::Index)
 	return d
 end
 get_dim(LT::LurTensor, is::Vector{Index}) = [get_dim(LT, i) for i in is]
-
+get_size(LT, is::Vector{Index}) = [get_size(LT, i) for i in is]
+get_size(LT, i::Index) = size(LT.arr)[get_dim(LT, i)]
 
 function get_contract_info(inds)
 	elem_count = Dict{Index, Vector{Int}}()
@@ -367,7 +371,6 @@ swapind(LT::LurTensor, i1, i2) = swapind!(shallow_copy(LT), i1, i2)
 hconj(LT::LurTensor{T, 2}) where {T} = conj(swapind(LT, LT.inds...))
 
 get_map(i1, i2; kw...) = get_map([Index(i) for i in i1], [Index(i) for i in i2]; kw...)
-
 function get_map(i1::Vector{Index}, i2::Vector{Index}; bidir=false)
 	@assert length(i1) == length(i2)
 	map = Dict{Index, Index}()
@@ -411,18 +414,27 @@ LinearAlgebra.eigvals(LT::LurTensor, linds...; kw...) = decomp(LT, eigvals_, lin
 LinearAlgebra.diag(LT::LurTensor) = LinearAlgebra.diag(LT.arr)
 
 # TODO: make methods for some classes of matrices
-eigen_(mat::Matrix; kw...) = (e = LinearAlgebra.eigen(mat); [e.vectors, diagm(e.values), LinearAlgebra.inv(e.vectors)])
-eigen_(mat::Hermitian; kw...) = (e = LinearAlgebra.eigen(mat); [e.vectors, diagm(e.values), adjoint(e.vectors)])
-qr_(mat::Matrix; kw...) = ((q, r) = LinearAlgebra.qr(mat); [Matrix(q), r])
+eigen_(mat::Matrix; kw...) = (e = LinearAlgebra.eigen(mat); ([e.vectors, diagm(e.values), LinearAlgebra.inv(e.vectors)], 0))
+eigen_(mat::Hermitian; kw...) = (e = LinearAlgebra.eigen(mat); ([e.vectors, diagm(e.values), adjoint(e.vectors)], 0))
+qr_(mat::Matrix; kw...) = ((q, r) = LinearAlgebra.qr(mat); ([Matrix(q), r], 0))
 function svd_(mat::Matrix; kw...)
 	u, s, v = LinearAlgebra.svd(mat)
-	cutoff = get(kw, :cutoff, 0)
+	nkeep = get(kw, :nkeep, length(s))
+	cutoff = get(kw, :cutoff, 10 * eps(s[1]))
 	# truncation index
 	ti = findfirst(x -> x <= cutoff, s)
 	ti = ti == nothing ? length(s) : ti - 1
-	[u[:,1:ti], diagm(s[1:ti]), adjoint(v)[1:ti,:]]
+	ti = min(nkeep, ti)
+	[u[:,1:ti], diagm(s[1:ti]), adjoint(v)[1:ti,:]], sum(s[ti+1:end].^2)
 end
-eigvals_(mat::Matrix) = LinearAlgebra.eigvals(mat)
+eigvals_(mat::Matrix) = (LinearAlgebra.eigvals(mat), 0)
+
+function apply_symm(mat::Matrix; kw...)
+	if get(kw, :hermitain, false)
+		return Hermitian(mat)
+	end
+	return mat
+end
 
 # TODO: Add code that exploit the symmetry of target LurTensor
 # Symmetry is given by kw
@@ -432,10 +444,11 @@ function decomp(LT, ft, linds::Vector{Int}; kw...)
 	LT_t = permutedims(LT, pvec); 
 	sz = size(LT_t); ls, rs = prod(sz[1:nl]), prod(sz[nl+1:end])
 	to_be_decomp = reshape(LT_t.arr, ls, rs)
+	to_be_decomp = apply_symm(to_be_decomp; kw...)
 	# decompose (ft can be qr, svd, eigen...)
-	decomp_res = ft(to_be_decomp; kw...)
+	decomp_res, info = ft(to_be_decomp; kw...)
 	if eltype(decomp_res) <: Number
-		return decomp_res
+		return decomp_res, info
 	end
 	
 	# reshape resultant matrices to LurTensor objects
@@ -447,7 +460,7 @@ function decomp(LT, ft, linds::Vector{Int}; kw...)
 	lmLT = LurTensor(lmarr_reshaped, [LT_t.inds[1:nl]..., Index(mid_tags[1], plev)])
 	rmLT = LurTensor(rmarr_reshaped, [Index(mid_tags[end], plev), LT_t.inds[nl+1:end]...])
 	mLT = [LurTensor(Matrix(arr), [mid_tags[i], mid_tags[i+1]], [plev, plev]) for (i, arr) in enumerate(marr)]
-	return [lmLT, mLT..., rmLT]
+	return [lmLT, mLT..., rmLT], info
 end
 
 
@@ -461,3 +474,5 @@ end
 include("GetIdentity.jl")
 include("LocalSpace.jl")
 include("UpdateLeft.jl")
+include("nonIntTB.jl")
+include("CanonForm.jl")

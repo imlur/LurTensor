@@ -49,10 +49,12 @@ check_common_inds(Cleft, X, ::Val{3}, ::Val{4}) =
 check_common_inds(Cleft, X, a, b) = nothing
 
 function check_common_inds(A, B, Aname::String, Bname::String)
-    if length(commoninds(A, B)) < 1
+	ci = commoninds(A, B)
+    if length(ci) < 1
         error("There are no common indices between $(Aname) and $(Bname)")
 
-    elseif length(commoninds(A, B)) > 1
+    elseif length(ci) > 1
         error("There are too many common indices between $(Aname) and $(Bname)")
     end
+	return ci[1]
 end
