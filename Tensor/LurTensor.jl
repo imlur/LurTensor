@@ -10,6 +10,7 @@ const Indexable = Union{String, Tuple{String, Int}, Index}
 Base.:(==)(x::Index, y::Index) = sort(x.tag) == sort(y.tag) && x.plev == y.plev
 Base.hash(i::Index) = hash((sort(i.tag), i.plev))
 Base.adjoint(i::Index) = Index(i.tag, i.plev + 1)
+Base.adjoint(v::Vector{Index}) = [i' for i in v]
 Index(ind::Index) = Index(ind.tag, ind.plev)
 Index(t::Tuple{String, Int}) = Index(t[1], t[2])
 Index(s::String) = Index(s, 0)
@@ -216,15 +217,37 @@ end
 permute_vec(v::Vector, vi) = [v[vi[i]] for i=1:length(vi)]
 
 get_pvec(linds::Vector{Int}, ndim::Int) = vcat(linds, [i for i=1:ndim if !(i in linds)])
-function Base.permutedims(LT::LurTensor{T, N}, perm) where {T, N}
+Base.permutedims(LT::LurTensor, inds...) = Base.permutedims(LT, to_indvec(inds...))
+Base.permutedims(LT::LurTensor, vi::Vector{Index}) = Base.permutedims(LT, get_dim(LT, vi))
+function Base.permutedims(LT::LurTensor, perm::Vector{Int}) 
 	new_arr = permutedims(LT.arr, perm)
 	new_inds = permute_vec(LT.inds, perm)
 	return LurTensor(new_arr, new_inds)
 end
 
+# Merge legs
+mergelegs(LT, inds...) = mergelegs(LT, to_indvec(inds...))
+mergelegs(LT, inds::Vector{Index}) = mergelegs(LT, get_dim(LT, inds[1:end-1]), inds[end])
+# midx : Merged indices, newi : New index
+function mergelegs(LT, midx::Vector{Int}, newi::Index)
+	#println(midx)
+	d = order(LT); r = d - length(midx)
+	if length(midx) < 1
+		error("There are no indices to merge")
+	elseif length(midx) > d
+		error("The number of merged indices is larger than rank of LurTensor")
+	end
+	permute_info = vcat([i for i=1:d if !(i in midx)], midx)
+	# LT, permuted
+	LTp = permutedims(LT, permute_info)
+	sz = size(LTp); new_sz = [sz[1:r]..., prod(sz[r+1:end])]
+	new_inds = [LTp.inds[1:r]..., newi]
+	return LurTensor(reshape(LTp, new_sz...), new_inds)
+end
+
 # Contract
 Base.sort(tag::String) = join(sort(split(tag, ',')), ',')
-function get_dim(LT::LurTensor, i::Index) 
+function get_dim(LT::LurTensor, i::Index)::Int
 	d = findfirst(x -> x == i, LT.inds)
 	if d isa Nothing
 		error("There are no index $(i) in LurTensor")
