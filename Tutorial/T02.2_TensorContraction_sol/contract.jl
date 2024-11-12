@@ -7,13 +7,13 @@ B = LurTensor(rand(6, 4, 5), "D", "A", "B")
 # Contract legs with same tag. 
 C = A * B
 
-show(stdout, C; showarr=true)
+println(C)
 
 # If you want to permute dimension after contraction, use permutedims function
 Cp = permutedims(C, [2, 1])
-show(stdout, Cp; showarr=true)
+println(Cp)
 
 # Unlike matlab, last trailling singleton dimensions are not removed
 D = LurTensor(rand(3, 4, 1, 1, 1), "Z", "X", "C", "V", "B")
 println(size(D))
-show(stdout, D; showarr=true)
+println(D)

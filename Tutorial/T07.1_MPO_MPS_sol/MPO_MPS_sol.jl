@@ -7,7 +7,7 @@ let
 	stags = ["site,$(i)" for i=1:L] # Site tag
 	hbtags = ["hld", ["h$(i)~$(i+1)" for i=1:L-1]..., "hrd"] # Bond leg for hamiltonian
 	btags = ["ld", ["$(i)~$(i+1)" for i=1:L-1]..., "rd"] # Bond leg tag for state
-	mtags = ["mld", ["m$(i)~$(i+1)" for i=1:L-1]..., "mrd"] # tags for middle legs
+	mtags = ["mld", ["m$(i)~$(i+1)" for i=1:L-1]..., "mrd"] # tags for HM
 	Sarr = getlocalspace("Spin", 1, 'S')
 
 	Hloc = zeros(3, 3, 14, 14)
@@ -143,7 +143,8 @@ let
 				MHM = updateleft(MHM, M[i]', (stags[i], 1), HM[i], (stags[i], 0))
 			end
 			println("for alpha = $(a), beta = $(b),")
-			println("<H>^2 - <H^2> = $(MHM[1]^2 - HMnorm[1]^2)")
+			println("<H> = $(value(MHM)^2)")
+			println("<H>^2 - <H^2> = $(value(MHM)^2 - value(HMnorm)^2)")
 		end
 	end
 end

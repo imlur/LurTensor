@@ -42,7 +42,7 @@ BCi = Bi * Ci
 ABCi = Ai * BCi
 
 println("From LurTensors :")
-show(stdout, ABCi; showarr=true)
+println(ABCi)
 println("\n\n")
 
 # Time comparison. Matrix multiplication vs. for loops

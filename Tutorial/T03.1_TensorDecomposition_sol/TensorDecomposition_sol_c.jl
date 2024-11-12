@@ -66,7 +66,7 @@ let
 	for i=1:rank-1
 		# 'cutoff' option truncate small singular values automatically 
 		atag = "$(i)~$(i+1)"
-		Ui, Si, Vi = svd(Ri, old_bond_tag, tagvec[i]; addtag=atag, cutoff=eps(1.0))
+		(Ui, Si, Vi), _ = svd(Ri, old_bond_tag, tagvec[i]; addtag=atag, cutoff=eps(1.0))
 		new_bond_tag = ind(Si; tag="left,$(atag)").tag
 		Tensors[i] = removetags(permutedims(Ui, [1, 3, 2]), "svd,left")
 		svals = diag(Si); Sent[i] = -sum((svals.^2).*log2.(svals.^2))
@@ -80,14 +80,14 @@ let
 	for i=1:rank
 		tensor = Tensors[i]
 		println("$(i)th tensor : ")
-		show(stdout, tensor; showarr=true)
-		println("\n")
+		println(tensor)
+		println()
 	end
 
 	for i=1:rank-1
 		print("$(round(Sent[i], digits=5))  ")
 	end
-	println("\n")
+	println()
 
 	# Contract tensors to get the original tensor
 	T2 = Tensors[1]

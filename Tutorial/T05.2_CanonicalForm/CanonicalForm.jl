@@ -17,16 +17,22 @@ let
 		end
 	end
 
-	# Without copy, original M vector is altered
+	# Without copy, original M vector is modified
 	M_L, S_L, _ = canonform(copy(M), N, "ld", "rd")
-	show(stdout, S_L; showarr=true)
+	display(M_L[1])
+	display(M_L[2])
+	display(M_L[3])
+	display(M_L[4])
+
+	S_L = value(S_L)
+	println(S_L) # About e69
 
 	# Overlap between the transformed MPS (S pulled out) and the original one
 	Tovl = LurTensor(reshape([1], 1, 1), ["ld", "ld"], [0, 1])
 	for i=1:N
 		Tovl = updateleft(Tovl, M_L[i]', (site_tags[i], 1), M[i], (site_tags[i], 0))
 	end
-	show(stdout, Tovl / S_L)
+	println(Tovl / S_L)
 	println()
 
 	# Use updateleft to "close the zipper" from right
@@ -34,17 +40,18 @@ let
 	for i=N:-1:1
 		Tovl = updateleft(Tovl, M_L[i]', (site_tags[i], 1), M[i], (site_tags[i], 0))
 	end
-	show(stdout, Tovl / S_L)
+	println(Tovl / S_L)
 	println()
 
 	# Overlap (in right canonical form)
 	M_R, S_R, _ = canonform(copy(M), 0, "ld", "rd")
+	S_R = value(S_R)
 
 	Tovl = LurTensor(reshape([1], 1, 1), ["ld", "ld"], [0, 1])
 	for i=1:N
 		Tovl = updateleft(Tovl, M_R[i]', (site_tags[i], 1), M[i], (site_tags[i], 0))
 	end
-	show(stdout, Tovl / S_R)
+	println(Tovl / S_R)
 	println()
 
 	# Overlap (in bond-canonical form)
@@ -56,6 +63,6 @@ let
 			Tovl = Tovl * S_B'
 		end
 	end
-	show(stdout, Tovl / S_L^2)
+	println(Tovl / S_L^2)
 	println()
 end

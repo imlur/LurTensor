@@ -28,7 +28,7 @@ let
 
 		if i == L
 			# eigenvalues (diagonal of D) are already sorted
-			(V, D, Vd), _ = eigen((Hnow + hconj(Hnow)) / 2, (btags[end], 1); hermitian=true)
+			(V, D, Vd), _ = eigen((Hnow + hconj(Hnow)) / 2, (btags[end], 1))
 			vgs = LurTensor(V[:, 1:1], ("rd", 0), ("rd", 1))
 			M[i] = noprime(Anow * vgs)
 			E_G = diag(D)[1]
@@ -40,14 +40,16 @@ let
 		Hprev = Hnow
 		left_dim *= 2
 	end
+	println("Ground state : ")
 	for m in M
-		println(m)
+		display(m)
 	end
 	println("-------------------------")
 
 	M, _, _ = canonform(M, 0, "ld", "rd")
+	println("Right canonical form : ")
 	for m in M
-		println(m)
+		display(m)
 	end
 	println(E_G)
 
@@ -70,17 +72,17 @@ let
 	for i=2:L
 		Hs_tot = Hs_tot * Hs[i]
 	end
-	println(Hnow)
+	display(Hnow)
 	site_inds = [Index("site,$(i)", 0) for i=1:L]
 	Hs_tot = mergelegs(Hs_tot, "hld", (site_inds')..., "hrd", ("rd", 1))
 	Hs_tot = mergelegs(Hs_tot, site_inds..., ("rd", 0))
 	println("norm(Hnow - Hs_tot) = ")
 	println(norm(Hnow - Hs_tot)) # Operator norm of different is zero
 
-	println("M : ")
-	println(M)
 	println("H : ")
-	println(Hs)
+	for Hloc in Hs
+		display(Hloc)
+	end
 
 	# merged bond leg tags
 	mtags = ["mld", ["m$(i)~$(i+1)" for i=1:L-1]..., "mrd"] 
@@ -90,16 +92,23 @@ let
 		MHs = mergelegs(M[i] * Hs[i], btags[i], hbtags[i], mtags[i])
 		HM[i] = mergelegs(MHs, btags[i+1], hbtags[i+1], mtags[i+1])
 	end
+	println("-------------Before canonform----------------------")
+	for HMloc in HM
+		display(HMloc)
+	end
 	println("-------------Canonical Form, first time------------")
 	HM, HMnorm, _ = canonform(HM, L, "mld", "mrd")
-	println(HM)
-	show(stdout, HMnorm; showarr=true)
+	for HMloc in HM
+		display(HMloc)
+	end
+	println(value(HMnorm))
 
 	println("-------------Canonical Form, second time-----------")
 	HM, HMnorm2, _ = canonform(HM, 0, "mld", "mrd")
-	println(HM)
-	show(stdout, HMnorm2; showarr=true)
-
+	for HMloc in HM
+		display(HMloc)
+	end
+	println(value(HMnorm2))
 	println("HMnorm - abs(E_G) = ")
 	println(HMnorm[1] - abs(E_G))
 

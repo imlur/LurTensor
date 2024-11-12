@@ -18,5 +18,5 @@ Ci = LurTensor(C, "B", "M", "D")
 ACi = Ai * Ci
 # Contract AC and B
 ABCi = Bi * ACi
-show(stdout, ABCi; showarr=true)
+println(ABCi)
 println("\n")

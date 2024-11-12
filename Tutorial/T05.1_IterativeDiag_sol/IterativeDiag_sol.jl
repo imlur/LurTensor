@@ -4,7 +4,6 @@ N = 50
 
 # Uniform hopping, logarithmic hopping
 ts = [[1 for i=1:N-1], 2. .^(-(0:N-2)/2)]
-println(ts[2])
 
 Nkeep = 300; 
 tol = Nkeep * 100 * eps(1.) # Numerical tolerance for degeneracy
@@ -28,7 +27,7 @@ function iter_diag(ts::Vector)
 			Z = getlocalspace("Fermion", 'Z', (stag[i], 1), (stag[i], 2))
 			F = getlocalspace("Fermion", 'F', (stag[i], 2), (stag[i], 0))
 			ZF = Z * F
-			Hhop = -ts[i-1] .* updateleft(Fprev, Anow', hconj(ZF), Anow)
+			Hhop = -ts[i-1] * updateleft(Fprev, Anow', hconj(ZF), Anow)
 			Hnow = Hnow + Hhop + hconj(Hhop)
 		end
 		
@@ -55,8 +54,10 @@ end
 
 # TODO: Plot them
 
+# uniform hopping
 i, e = iter_diag(ts[1])
-println(i - e)
+println(i - e) # ground-state energy error
 
+# logarithmic hopping
 i, e = iter_diag(ts[2])
-println(i - e)
+println(i - e) # ground-state energy error

@@ -5,10 +5,10 @@ function check_normalization(T::LurTensor)
 	Tr = conj(prime(T; tag="R"))
 
 	println("Checking right-normalization")
-	show(stdout, T * Tl, showarr=true) 
+	println(T * Tl)
 
 	println("Checking left-normalization")
-	show(stdout, T * Tr, showarr=true) 
+	println(T * Tr)
 end
 
 # Generate AKLT state 
@@ -65,5 +65,5 @@ let
 		end
 	end
 	println("\n\nMagnetization at site $(n) is")
-	show(stdout, T, showarr=true)
+	println(value(T))
 end

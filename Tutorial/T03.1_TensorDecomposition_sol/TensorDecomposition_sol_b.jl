@@ -42,16 +42,13 @@ T_withdummy = reshape(T, (1, size(T)..., 1))
 Ti = LurTensor(T_withdummy, "ldm", tagvec..., "rdm")
 
 # (i) A = {1, 2}, B = {3, 4, 5}
-_, S, _ = svd(Ti, "ldm", tagvec[1], tagvec[2])
-svals = diag(S)
+svals, _ = svdvals(Ti, "ldm", tagvec[1], tagvec[2])
 println("Entanglement entropy when A = {1, 2} is $(ee_from_svals(svals))")
 
 # (ii) A = {1, 3}, B = {2, 4, 5}
-_, S, _ = svd(Ti, "ldm", tagvec[1], tagvec[3])
-svals = diag(S)
+svals, _ = svdvals(Ti, "ldm", tagvec[1], tagvec[3])
 println("Entanglement entropy when A = {1, 3} is $(ee_from_svals(svals))")
 
 # (iii) A = {1, 5}, B = {2, 3, 4}
-_, S, _ = svd(Ti, "ldm", tagvec[1], tagvec[5])
-svals = diag(S)
+svals, _ = svdvals(Ti, "ldm", tagvec[1], tagvec[5])
 println("Entanglement entropy when A = {1, 5} is $(ee_from_svals(svals))")

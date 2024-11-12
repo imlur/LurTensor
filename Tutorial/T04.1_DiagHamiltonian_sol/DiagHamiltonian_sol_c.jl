@@ -26,7 +26,7 @@ let
 		Fprev = updateleft(Anow', (left_tag, 1), F, Anow, (left_tag, 0))
 		left_tag = "$(i)"; left_dim *= 2
 	end
-	show(stdout, H)
+	display(H)
 	H_mat = H.arr
 	Es = sort(eigvals(H_mat))
 	println(round.(Es[1:10], digits=4))

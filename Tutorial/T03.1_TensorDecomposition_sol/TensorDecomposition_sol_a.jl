@@ -20,7 +20,7 @@ let
 	for i=1:rank-1
 		# QR decomposition, regard Ri as matrix of dimension
 		# (old_bond_idx, idxs[i]) * (other indices of Ri)
-		Qi, Ri = qr(Ri, old_bond_tag, tagvec[i]; addtag="$(i)~$(i+1)")
+		(Qi, Ri), _ = qr(Ri, old_bond_tag, tagvec[i]; addtag="$(i)~$(i+1)")
 		# Leg between Qi and Ri created in QR decomposition.
 		# Used the function which gives common indices of two tensors.
 		new_bond_tag = commonind(Qi, Ri).tag
@@ -35,8 +35,8 @@ let
 	for i=2:rank
 		T2 = T2 * Tensors[i]
 	end
-	show(stdout, Ti)
-	show(stdout, T2)
+	display(Ti)
+	display(T2)
 	# about e-15
 	println("Norm of T - T2 is $(norm(Ti - T2))")
 end

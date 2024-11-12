@@ -28,8 +28,9 @@ let
 	for i=1:rank
 		tensor = Tensors[i]
 		println("$(i)th tensor : ")
-		show(stdout, "text/plain", tensor)
-		println("\n\n")
+		println(size(tensor))
+		#show(stdout, "text/plain", tensor)
+		println()
 	end
 end
 
@@ -48,7 +49,7 @@ let
 	for i=1:rank-1
 		# QR decomposition, regard Ri as matrix of dimension
 		# (old_bond_idx, idxs[i]) * (other indices of Ri)
-		Qi, Ri = qr(Ri, old_bond_tag, tagvec[i]; addtag="$(i)~$(i+1)")
+		(Qi, Ri), _ = qr(Ri, old_bond_tag, tagvec[i]; addtag="$(i)~$(i+1)")
 		# Leg between Qi and Ri created in QR decomposition.
 		# Used the function which gives common indices of two tensors.
 		new_bond_tag = commonind(Qi, Ri).tag
@@ -62,8 +63,8 @@ let
 	for i=1:rank
 		tensor = Tensors[i]
 		println("$(i)th tensor : ")
-		show(stdout, tensor; showarr=true)
-		println("\n\n")
+		display(tensor)
+		println()
 	end
 end
 

@@ -34,7 +34,7 @@ let
 		end
 		left_tag = "$(i)"; left_dim *= 2
 	end
-	show(stdout, H, showarr=true)
+	println(H)
 	#arr = Array{Float64, 2}(H, inds(H)...)
 	println(round.(eigvals(H.arr), digits=2))
 end

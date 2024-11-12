@@ -21,17 +21,17 @@ to_indvec(ks::Vector{String}) = to_indvec(ks, [0 for _=1:length(ks)])
 to_indvec(inds::Index...) = collect(inds)
 to_indvec(ks...) = [Index(k) for k in ks]
 
-struct LurTensor{T<:Number, N} <: AbstractArray{T, N}
-	arr::AbstractArray{T, N}
+struct LurTensor
+	arr::AbstractArray
 	inds::Vector{Index}
 
-	function LurTensor(arr::AbstractArray{T, N}, inds::Vector{Index}) where {T, N}
-		if length(inds) != N
+	function LurTensor(arr::AbstractArray, inds::Vector{Index})
+		if length(inds) != ndims(arr)
 			error("Dimension of array is not equal to number of Index objects")
 		elseif 0 in map(x -> length(x.tag), inds)
 			error("Some of tags are empty string")
 		end
-		new{T, N}(arr, inds)
+		new(arr, inds)
 	end
 end
 
@@ -41,67 +41,78 @@ LurTensor(LT::LurTensor, linds::Indexable...) = LurTensor(LT.arr, linds...)
 LurTensor(x::Number) = LurTensor([x], ["Null"])
 LurTensor() = LurTensor(0)
 
-function showDim(io::IO, LT::LurTensor{T, N}) where {T, N}
+function Base.show(io::IO, ::MIME"text/plain", LT::LurTensor)
 	sz = size(LT)
 	println("\t\tSize\tplev\ttag")
+	N = ndims(LT)
 	for d=1:N	
-		println("Dim $(d) : \t$(sz[d]) \t$(LT.inds[d].plev) \t$(LT.inds[d].tag)")
+		print("Dim $(d) : \t$(sz[d]) \t$(LT.inds[d].plev) \t$(LT.inds[d].tag)")
+		(d < N) && println()
 	end
 end
 
-function Base.show(io::IO, LT::LurTensor; showarr=false)
-	showDim(io, LT)
-	if showarr
-		println()
-		show(io, "text/plain", LT)
-	end
-	println("\n\n")
-end
+Base.show(io::IO, LT::LurTensor) = 
+	(show(io, "text/plain", LT); println(); 
+	show(io, "text/plain", LT.arr); println())
 
 Base.showarg(io::IO, LT::LurTensor, toplevel) = showDim(io, LT)
-
-Base.IndexStyle(::Type{<:LurTensor}) = IndexLinear()
+#Base.IndexStyle(::Type{<:LurTensor}) = IndexLinear()
 LurTensor(arr::AbstractArray{T, N}, tags) where {T, N} = LurTensor(arr, tags, [0 for _=1:N])
 
-function LurTensor(LT::LurTensor{T, N}, I...) where {T, N}
+Base.ndims(LT::LurTensor) = ndims(LT.arr)
+function LurTensor(LT::LurTensor, I...)
 	new_arr = getindex(LT.arr, I...)
-	new_inds = [LT.inds[i] for i=1:N if !(I[i] isa Integer)]
+	new_inds = [LT.inds[i] for i=1:ndims(LT) if !(I[i] isa Integer)]
 	LurTensor(new_arr, new_inds)
 end
 
-Base.similar(LT::LurTensor{T, N}) where {N, T} = LurTensor(zeros(T, size(LT)...), LT.tags, LT.plevs)
+LinearAlgebra.norm(LT::LurTensor) = norm(LT.arr)
+Base.axes(LT::LurTensor, i::Int) = axes(LT.arr, i)
+Base.reshape(LT::LurTensor, args...) = reshape(LT.arr, args...)
+Base.similar(LT::LurTensor) = LurTensor(zeros(eltype(LT.arr), size(LT)...), LT.tags, LT.plevs)
 
 order(LT::LurTensor) = length(size(LT))
 order(v::Vector{Index}) = length(v)
 Base.size(LT::LurTensor) = size(LT.arr)
 Base.size(LT::LurTensor, dim::Int) = size(LT.arr, dim)
 
+subtensor(LT, i, r) = subtensor(LT, [i], [r])
+subtensor(LT, ts::Tuple...) = 
+	subtensor(LT, [t[1] for t in ts], [t[2] for t in ts])
+subtensor(LT, v::Vector, r::Vector) = 
+	subtensor(LT, Dict(Index(v[i]) => r[i] for i=1:length(v)))
+subtensor(LT, d::Dict{Index}) = 
+	getindex(LT, [i in keys(d) ? d[i] : (:) for i in LT.inds]...) 
+
 Base.getindex(LT::LurTensor, I...) = LurTensor(LT, I...)
 Base.getindex(LT::LurTensor, i1::Union{Integer, CartesianIndex}, I::Union{Integer, CartesianIndex}...) = getindex(LT.arr, i1, I...)
 Base.getindex(LT::LurTensor, c::Colon) = getindex(LT.arr, c)
 Base.getindex(LT::LurTensor, I::AbstractUnitRange{<:Integer}) = getindex(LT.arr, I)
-Base.setindex!(LT::LurTensor{T, N}, v, I...) where {T, N} = setindex!(LT.arr, v, I...)
-Base.setindex!(LT::LurTensor{T, N}, v, i::Int) where {T, N} = setindex!(LT.arr, v, i)
-Base.setindex!(LT::LurTensor{T, N}, v, i1::Int, i2::Int, I::Int...) where {T, N} = setindex!(LT.arr, v, i1, i2, I...)
+Base.setindex!(LT::LurTensor, v, I...) = setindex!(LT.arr, v, I...)
+Base.setindex!(LT::LurTensor, v, i::Int) = setindex!(LT.arr, v, i)
+Base.setindex!(LT::LurTensor, v, i1::Int, i2::Int, I::Int...) = 
+	setindex!(LT.arr, v, i1, i2, I...)
 Base.setindex!(LT::LurTensor, v, c::Colon) = setindex!(LT.arr, v, c)
 Base.setindex!(LT::LurTensor, v, I::AbstractUnitRange{<:Integer}) = setindex!(LT.arr,v, I)
 
 
 # Broadcast setting
-Base.showarg(io::IO, A::LurTensor, toplevel) = print(io, typeof(A))
-Base.BroadcastStyle(::Type{<:LurTensor}) = Broadcast.ArrayStyle{LurTensor}()
+Base.broadcasted(ft, LT::LurTensor, args...) = 
+	LurTensor(Base.broadcasted(ft, LT.arr, args...), LT.inds)
+#Base.showarg(io::IO, A::LurTensor, toplevel) = print(io, typeof(A))
+#Base.BroadcastStyle(::Type{<:LurTensor}) = Broadcast.ArrayStyle{LurTensor}()
 
-function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{LurTensor}}, ::Type{ElType}) where ElType
-	A = find_aac(bc)
-	LurTensor(similar(Array{ElType}, axes(bc)), A.inds)
-end
+#function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{LurTensor}}, ::Type{ElType}) where ElType
+#	A = find_aac(bc)
+#	LurTensor(similar(Array{ElType}, axes(bc)), A.inds)
+#end
 
-find_aac(bc::Base.Broadcast.Broadcasted) = find_aac(bc.args)
-find_aac(args::Tuple) = find_aac(find_aac(args[1]), Base.tail(args))
-find_aac(x) = x
-find_aac(::Tuple{}) = nothing
-find_aac(a::LurTensor, rest) = a
-find_aac(::Any, rest) = find_aac(rest)
+#find_aac(bc::Base.Broadcast.Broadcasted) = find_aac(bc.args)
+#find_aac(args::Tuple) = find_aac(find_aac(args[1]), Base.tail(args))
+#find_aac(x) = x
+#find_aac(::Tuple{}) = nothing
+#find_aac(a::LurTensor, rest) = a
+#find_aac(::Any, rest) = find_aac(rest)
 
 # Copy LurTensor object
 Base.copy(LT::LurTensor) = LurTensor(Base.copy(LT.arr), Base.copy(LT.inds))
@@ -203,8 +214,8 @@ swapprime(LT::LurTensor, pl1::Int, pl2::Int; kw...) = modify(swapprime!, LT, pl1
 
 modify(ft, LT::LurTensor, arg...; kw...) = (LT2 = copy(LT); ft(LT2, arg...; kw...))
 
-function modify!(LT::LurTensor{T, N}, ft::Function, cond_ft, arg...) where {T, N} 
-	for i=1:N
+function modify!(LT::LurTensor, ft::Function, cond_ft, arg...)
+	for i=1:ndims(LT)
 		if cond_ft(LT.inds[i])
 			LT.inds[i] = ft(LT.inds[i], arg...)
 		end
@@ -284,6 +295,9 @@ end
 Base.:+(x::LurTensor, y::LurTensor) = tensor_arith(x, y, Base.:+)
 Base.:-(x::LurTensor, y::LurTensor) = tensor_arith(x, y, Base.:-)
 Base.:*(x::LurTensor, y::LurTensor) = contract(contract(x), contract(y))
+Base.:*(x::Number, y::LurTensor) = LurTensor(y.arr * x, y.inds)
+Base.:*(x::LurTensor, y::Number) = LurTensor(x.arr * y, x.inds)
+Base.:/(x::LurTensor, y::Number) = LurTensor(x.arr / y, x.inds)
 
 new_dim1(sz, raxis, caxis1, caxis2) = [new_dim1(sz, raxis, Val(length(raxis)))..., prod(sz[caxis1]), prod(sz[caxis2])]
 new_dim1(sz, raxis, ::Val{0}) = []
@@ -391,7 +405,10 @@ swapind!(LT::LurTensor, i1, i2) = swapinds!(LT, [i1], [i2])
 replaceind(LT::LurTensor, i1, i2) = replaceind!(shallow_copy(LT), i1, i2)
 swapind(LT::LurTensor, i1, i2) = swapind!(shallow_copy(LT), i1, i2)
 
-hconj(LT::LurTensor{T, 2}) where {T} = conj(swapind(LT, LT.inds...))
+Base.conj(LT::LurTensor) = LurTensor(conj(LT.arr), LT.inds)
+hconj(LT::LurTensor) = (@assert ndims(LT) == 2; 
+						conj(swapind(LT, LT.inds...)))
+Base.length(LT::LurTensor) = length(LT.arr)
 
 get_map(i1, i2; kw...) = get_map([Index(i) for i in i1], [Index(i) for i in i2]; kw...)
 function get_map(i1::Vector{Index}, i2::Vector{Index}; bidir=false)
@@ -419,21 +436,28 @@ idx_list(A::LurTensor) = A.inds
 idx_list(v::Vector{Index}) = v
 
 inds_meet_cond(ft, LTs...; kw...) = 
-	inds_meet_cond(ft, map(x -> idx_list(x), LTs)...; kw...)
+	inds_meet_cond(ft, map(idx_list, LTs)...; kw...)
 
 inds_meet_cond(ft, Idxvs::Vector{Index}...; kw...) = 
 	filter(x -> cd(kw)(x), ft(Idxvs...))
 
-first_elem(v::Vector) = isempty(v) ? nothing : v[1]
+first_elem(v::Vector) = isempty(v) ? error("vector is empty") : v[1]
 
-decomp(LT, ft, linds::Vector{Index}; kw...) = decomp(LT, ft, get_dim(LT, linds); kw...)
-decomp(LT, ft, linds::Int...; kw...) = decomp(LT, ft, collect(linds); kw...)
-decomp(LT, ft, linds...; kw...) = decomp(LT, ft, to_indvec(linds...); kw...)
+decomp(V, LT, ft, linds::Vector{Index}; kw...) = decomp(V, LT, ft, get_dim(LT, linds); kw...)
+decomp(V, LT, ft, linds::Int...; kw...) = decomp(V, LT, ft, collect(linds); kw...)
+decomp(V, LT, ft, linds...; kw...) = decomp(V, LT, ft, to_indvec(linds...); kw...)
 
-LinearAlgebra.eigen(LT::LurTensor, linds...; kw...) = decomp(LT, eigen_, linds...; kw...)
-LinearAlgebra.qr(LT::LurTensor, linds...; kw...) = decomp(LT, qr_, linds...; kw...)
-LinearAlgebra.svd(LT::LurTensor, linds...; kw...) = decomp(LT, svd_, linds...; kw...)
-LinearAlgebra.eigvals(LT::LurTensor, linds...; kw...) = decomp(LT, eigvals_, linds...; kw...)
+
+LinearAlgebra.eigen(LT::LurTensor, linds...; kw...) = 
+	decomp(Val(true), LT, eigen_, linds...; kw...)
+LinearAlgebra.qr(LT::LurTensor, linds...; kw...) = 
+	decomp(Val(true), LT, qr_, linds...; kw...)
+LinearAlgebra.svd(LT::LurTensor, linds...; kw...) = 
+	decomp(Val(true), LT, svd_, linds...; kw...)
+LinearAlgebra.eigvals(LT::LurTensor, linds...; kw...) = 
+	decomp(Val(false), LT, eigvals_, linds...; kw...)
+LinearAlgebra.svdvals(LT::LurTensor, linds...; kw...) = 
+	decomp(Val(false), LT, svdvals_, linds...; kw...)
 LinearAlgebra.diag(LT::LurTensor) = LinearAlgebra.diag(LT.arr)
 
 # TODO: make methods for some classes of matrices
@@ -451,6 +475,7 @@ function svd_(mat::Matrix; kw...)
 	[u[:,1:ti], diagm(s[1:ti]), adjoint(v)[1:ti,:]], sum(s[ti+1:end].^2)
 end
 eigvals_(mat::Matrix) = (LinearAlgebra.eigvals(mat), 0)
+svdvals_(mat::Matrix) = (LinearAlgebra.svdvals(mat), 0)
 
 function apply_symm(mat::Matrix; kw...)
 	if get(kw, :hermitain, false)
@@ -461,7 +486,7 @@ end
 
 # TODO: Add code that exploit the symmetry of target LurTensor
 # Symmetry is given by kw
-function decomp(LT, ft, linds::Vector{Int}; kw...)
+function decomp(V, LT, ft, linds::Vector{Int}; kw...)
 	# Reshape the array to matrix form
 	nl = length(linds); pvec = get_pvec(linds, ndims(LT))
 	LT_t = permutedims(LT, pvec); 
@@ -469,11 +494,12 @@ function decomp(LT, ft, linds::Vector{Int}; kw...)
 	to_be_decomp = reshape(LT_t.arr, ls, rs)
 	to_be_decomp = apply_symm(to_be_decomp; kw...)
 	# decompose (ft can be qr, svd, eigen...)
-	decomp_res, info = ft(to_be_decomp; kw...)
-	if eltype(decomp_res) <: Number
-		return decomp_res, info
-	end
-	
+	decomp_res, info::Float64 = ft(to_be_decomp; kw...)
+	return postprocess(V, decomp_res, sz, nl, ft, LT_t; kw...), info
+end
+
+postprocess(::Val{false}, res, a...; kw...) = res
+function postprocess(::Val{true}, decomp_res, sz, nl, ft, LT_t; kw...)
 	# reshape resultant matrices to LurTensor objects
 	lmarr, marr..., rmarr = decomp_res
 	addtag = get(kw, :addtag, ""); plev = get(kw, :plev, 0)
@@ -483,7 +509,7 @@ function decomp(LT, ft, linds::Vector{Int}; kw...)
 	lmLT = LurTensor(lmarr_reshaped, [LT_t.inds[1:nl]..., Index(mid_tags[1], plev)])
 	rmLT = LurTensor(rmarr_reshaped, [Index(mid_tags[end], plev), LT_t.inds[nl+1:end]...])
 	mLT = [LurTensor(Matrix(arr), [mid_tags[i], mid_tags[i+1]], [plev, plev]) for (i, arr) in enumerate(marr)]
-	return [lmLT, mLT..., rmLT], info
+	return [lmLT, mLT..., rmLT]
 end
 
 
@@ -493,9 +519,13 @@ function get_mtags(ftname, addtag::String, n::Int)
 	return [add_tag ? ftname*i*","*addtag : ftname*i for i in tags]
 end
 
+value(LT) = (@assert length(LT) == 1; LT[1])
 
 include("GetIdentity.jl")
 include("LocalSpace.jl")
 include("UpdateLeft.jl")
 include("nonIntTB.jl")
 include("CanonForm.jl")
+include("Lanczos.jl")
+include("../DMRG/DMRG_GS_1site.jl")
+
