@@ -28,8 +28,8 @@ let
 	println("Initialization start")
 	
 	# Initialization
-	Hs[1] = Hs[1][:, :, end:end, :]
-	Hs[end] = Hs[end][:, :, :, 1:1]
+	Hs[1] = Hs[1][:, :, end, :]
+	Hs[end] = Hs[end][:, :, :, 1]
 
 	Minit = Vector{LurTensor}(undef, L)
 	Hprev = LurTensor(reshape([1], 1, 1), ["ld", "ld"], [0, 1])
@@ -63,6 +63,8 @@ let
 	end
 
 	println("Initialization completed")
-	M0, E0, Eiter, Sv = DMRG_GS_1site!(Minit, Hs)
+	M0, E0, Eiter, Sv = DMRG_GS_1site!(Minit, Hs);
 	E0_exact = 0.5 - 1 / (2 * sin(pi / (2*(L+1))))
+	println("Exact : $(E0_exact)")
+	nothing
 end

@@ -1,12 +1,12 @@
 using LinearAlgebra
 
 function lowesteigs(init, mft, args...; Krylov=5, tol=1e-8)
-	T, V = lanczos(init, mft, args...; Krylov, tol)
-	display(T)
-	display([round.(v, digits=4) for v in V])
+	# Normalize first
+	init = init / norm(init)
+	T, V, nv = lanczos(init, mft, args...; Krylov, tol)
 	vals, vecs = eigen(T)
 	val, vec = vals[1], vecs[:, 1]
-	return sum([vec[i] * V[i] for i=1:length(vec)]), val
+	return sum([vec[i] * V[i] for i=1:min(nv, length(vec))]), val
 end
 
 # init : initial guess
@@ -23,8 +23,12 @@ function lanczos(init::T, mft, args...; Krylov=5, tol=1e-8) where T
 	V = Vector{T}(undef, Krylov)
 	V[1] = v
 
+	nv = 1
 	for i=1:Krylov
+		#display(v)
 		w = mft(v, args...)
+		#display(w)
+		#display(matchlegs(v, w))
 		# sum(elementwise product of complex conjugate of v and w)
 		# = inner product
 		d[i] = dot(v, w)
@@ -37,7 +41,8 @@ function lanczos(init::T, mft, args...; Krylov=5, tol=1e-8) where T
 		if i < Krylov
 			sd[i] = nu
 			V[i+1] = v
+			nv += 1
 		end
 	end
-	return SymTridiagonal(d, sd), V
+	return SymTridiagonal(d, sd), V, nv
 end

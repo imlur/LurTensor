@@ -161,13 +161,17 @@ set_tag(ind::Index, str, ::Val{0}) = error("Empty tag is not allowed")
 set_tag(ind::Index, str, ::Any) = Index(remove_dup(str), ind.plev)
 
 function add_tag(ind::Index, str::String)
-	tag = ind.tag; tag_split = split(tag, ',')
+	tag = ind.tag
+	if length(tag) == 0
+		return Index(str, ind.plev)
+	end
+	tag_split = split(tag, ',')
 	for s in split(str, ',')
 		if !(s in tag_split)
-			tag *= ',' * s 
+			push!(tag_split, s)
 		end
 	end
-	return Index(tag, ind.plev)
+	return Index(join(tag_split, ','), ind.plev)
 end
 
 replace_tag(ind::Index, s1, s2) = replace_tag(ind, s1, s2, Val(check(ind.tag, s1)))
@@ -241,7 +245,6 @@ mergelegs(LT, inds...) = mergelegs(LT, to_indvec(inds...))
 mergelegs(LT, inds::Vector{Index}) = mergelegs(LT, get_dim(LT, inds[1:end-1]), inds[end])
 # midx : Merged indices, newi : New index
 function mergelegs(LT, midx::Vector{Int}, newi::Index)
-	#println(midx)
 	d = order(LT); r = d - length(midx)
 	if length(midx) < 1
 		error("There are no indices to merge")
@@ -292,12 +295,13 @@ function get_contract_info(inds)
 	return sort(raxis), caxis1, caxis2, length(caxis1)
 end
 
-Base.:+(x::LurTensor, y::LurTensor) = tensor_arith(x, y, Base.:+)
-Base.:-(x::LurTensor, y::LurTensor) = tensor_arith(x, y, Base.:-)
+Base.:+(x::LurTensor, y::LurTensor) = tensor_arith(matchlegs(x, y), y, Base.:+)
+Base.:-(x::LurTensor, y::LurTensor) = tensor_arith(matchlegs(x, y), y, Base.:-)
 Base.:*(x::LurTensor, y::LurTensor) = contract(contract(x), contract(y))
 Base.:*(x::Number, y::LurTensor) = LurTensor(y.arr * x, y.inds)
 Base.:*(x::LurTensor, y::Number) = LurTensor(x.arr * y, x.inds)
 Base.:/(x::LurTensor, y::Number) = LurTensor(x.arr / y, x.inds)
+LinearAlgebra.dot(x::LurTensor, y::LurTensor) = dot(matchlegs(x, y).arr, y.arr)
 
 new_dim1(sz, raxis, caxis1, caxis2) = [new_dim1(sz, raxis, Val(length(raxis)))..., prod(sz[caxis1]), prod(sz[caxis2])]
 new_dim1(sz, raxis, ::Val{0}) = []
@@ -361,7 +365,8 @@ function contract(arr1, inds1, arr2, inds2, raxis, caxis1, caxis2, nc)
 	LurTensor(output, new_inds)
 end
 
-function tensor_arith(x, y, ft)
+# permute dimensions of x to match dimensions of y
+function matchlegs(x, y)
 	if length(noncommoninds(x, y)) > 0
 		error("Two tensors don't have same set of indices")
 	end
@@ -373,9 +378,10 @@ function tensor_arith(x, y, ft)
 		end
 		push!(permute_vec, xi)
 	end
-	LurTensor(ft(x.arr, permutedims(y.arr, permute_vec)), x.inds)
+	LurTensor(permutedims(x.arr, permute_vec), y.inds)
 end
 
+tensor_arith(x, y, ft) = LurTensor(ft(x.arr, y.arr), x.inds)
 
 commoninds(LT1, LT2; kw...) = inds_meet_cond(intersect, LT1, LT2; kw...)
 uniqueinds(LT1, LT2; kw...) = inds_meet_cond(setdiff, LT1, LT2; kw...)
@@ -392,6 +398,12 @@ unionind(LT1, LT2; kw...) = first_elem(unioninds(LT1, LT2; kw...))
 ind(LT1::LurTensor; kw...) = first_elem(inds(LT1; kw...))
 
 # tested only for reaplceinds! function
+replacecommoninds!(L1, L2, ia) = replacecommoninds(L1, L2, Index(ia))
+function replacecommoninds!(L1, L2, ia)
+	commind = check_common_inds(L1, L2, "L1", "L2 in replacecommoninds!")
+	replaceinds!(L1, commind, ia)
+	replaceinds!(L2, commind, ia)
+end
 replaceinds!(LT::LurTensor, i1, i2) = replinds!(LT, get_map(i1, i2; bidir=false))
 swapinds!(LT::LurTensor, i1, i2) = replinds!(LT, get_map(i1, i2; bidir=true))
 
@@ -466,7 +478,7 @@ eigen_(mat::Hermitian; kw...) = (e = LinearAlgebra.eigen(mat); ([e.vectors, diag
 qr_(mat::Matrix; kw...) = ((q, r) = LinearAlgebra.qr(mat); ([Matrix(q), r], 0))
 function svd_(mat::Matrix; kw...)
 	u, s, v = LinearAlgebra.svd(mat)
-	nkeep = get(kw, :nkeep, length(s))
+	nkeep = get(kw, :Nkeep, length(s))
 	cutoff = get(kw, :cutoff, 10 * eps(s[1]))
 	# truncation index
 	ti = findfirst(x -> x <= cutoff, s)
@@ -526,6 +538,7 @@ include("LocalSpace.jl")
 include("UpdateLeft.jl")
 include("nonIntTB.jl")
 include("CanonForm.jl")
+include("Utils.jl")
 include("Lanczos.jl")
 include("../DMRG/DMRG_GS_1site.jl")
 
