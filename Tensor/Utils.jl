@@ -11,6 +11,19 @@ function mpsnorm(M::Vector{LurTensor}, ldi::Index, rdi::Index)
 	return value(t)
 end
 
+innerprod(M1, M2, ldi, rdi) = innerprod(M1, M2, Index(ldi), Index(rdi))
+function innerprod(M1::Vector{LurTensor}, M2::Vector{LurTensor}, 
+				   ldi::Index, rdi::Index)
+	nt = length(M1)
+	bond_inds = [ldi, [check_common_inds(M1[i], M1[i+1], "M1[$(i)]", "M1[$(i+1)]") for i=1:nt-1]..., rdi]
+	site_inds = [uniqueind(M1[i], bond_inds) for i=1:nt]
+	t = LurTensor(reshape([1], 1, 1), ldi, ldi')
+	for i=1:nt
+		t = (t * M1[i]) * prime(M2[i]', -1; tag=site_inds[i].tag)
+	end
+	return value(t)
+end
+
 getenergy(M, Hs, ldi, rdi) = getenergy(M, Hs, Index(ldi), Index(rdi))
 function getenergy(M::Vector{LurTensor}, Hs::Vector{LurTensor}, ldi::Index, rdi::Index)
 	nt = length(M)

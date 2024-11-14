@@ -31,7 +31,8 @@ let
 	Hs[1] = Hs[1][:, :, end, :]
 	Hs[end] = Hs[end][:, :, :, 1]
 
-	Minit = Vector{LurTensor}(undef, L)
+	M0 = Vector{LurTensor}(undef, L) # for ground state
+	M1 = Vector{LurTensor}(undef, L) # for 1st excited state
 	Hprev = LurTensor(reshape([1], 1, 1), ["ld", "ld"], [0, 1])
 	Aprev = LurTensor(reshape([1], 1, 1), ["ld", "ld"], [0, 1])
 	left_dim = 1; left_tag = "ld"
@@ -46,8 +47,8 @@ let
 		(V, D, Vd), _ = eigen((Hmat + hconj(Hmat)) / 2, ("$(btags[i+1]),temp", 1))
 		Dd = diag(D)
 		if i == L
-			# Last iteration -> pick only ground state
-			Ntr = 1
+			# Last iteration -> pick only ground / 1st excited state
+			Ntr = 2
 		elseif length(Dd) > Nkeep
 			Ntr = findfirst(x -> x > Dd[Nkeep + 1] - tol, Dd) - 1
 		else
@@ -56,16 +57,31 @@ let
 
 		Vtrunc = LurTensor(V[:, 1:Ntr], "$(btags[i+1]),temp", btags[i+1]) 
 		Anow = Anow * Vtrunc
-		Minit[i] = Anow
+		if i < L
+			M0[i] = Anow
+			M1[i] = copy(Anow)
+		else
+			M0[i] = subtensor(Anow, "rd", 1:1)
+			M1[i] = subtensor(Anow, "rd", 2:2)
+		end
 
 		Hprev = (Hnow * Vtrunc) * Vtrunc'
 		Aprev = Anow; left_dim = Ntr; left_tag = btags[i+1]
 	end
 
 	println("Initialization completed")
-	M0, E0, Eiter, Sv = DMRG_GS_1site!(Minit, Hs);
+	E0, _, _ = DMRG_GS_1site!(M0, Hs)
+	println("------------------------")
+	E1, _, _ = DMRG_ES_1site!(M1, Hs, M0)
 	E0_exact = 0.5 - 1 / (2 * sin(pi / (2*(L+1))))
-	println("Exact : $(E0_exact)")
-	println("Diff : $(E0 - E0_exact)")
-	nothing
+	E1_exact = E0_exact + sin(pi / (2*(L+1)))
+
+	println("<GS|ES> = $(innerprod(M0, M1, "ld", "rd"))")
+
+	println("Exact energy of ground state : $(E0_exact)")
+	println("Exact energy of 1st excited state : $(E1_exact)")
+	println("Energy of ground state from DMRG : $(E0)")
+	println("Energy of 1st excited state from DMRG : $(E1)")
+	println("Diff of ground state energy : $(E0 - E0_exact)")
+	println("Diff of 1st excited state energy : $(E1 - E1_exact)")
 end
