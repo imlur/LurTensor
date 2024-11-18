@@ -84,4 +84,6 @@ let
 	println("Energy of 1st excited state from DMRG : $(E1)")
 	println("Diff of ground state energy : $(E0 - E0_exact)")
 	println("Diff of 1st excited state energy : $(E1 - E1_exact)")
+
+	# TODO: calculate spin-spin correlation function
 end

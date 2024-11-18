@@ -63,7 +63,7 @@ let
 	end
 
 	println("Initialization completed")
-	M0, E0, Eiter, Sv = DMRG_GS_1site!(Minit, Hs);
+	E0, Eiter, Sv = DMRG_GS_1site!(Minit, Hs);
 	E0_exact = 0.5 - 1 / (2 * sin(pi / (2*(L+1))))
 	println("Exact : $(E0_exact)")
 	println("Diff : $(E0 - E0_exact)")
