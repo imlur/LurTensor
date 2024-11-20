@@ -311,7 +311,7 @@ new_dim2(sz, pvec, n, ::Any, ::Val{true}) = [prod(sz)]
 new_dim2(sz, pvec, n, ::Val{'L'}, ::Val{false}) = [prod(sz[pvec[1:n]]), prod(sz[pvec[n+1:end]])]
 new_dim2(sz, pvec, n, ::Val{'R'}, ::Val{false}) = [prod(sz[pvec[1:end-n]]), prod(sz[pvec[end-n+1:end]])]
 
-mult(arr1::Array, arr2) = arr1 * arr2
+mult(arr1::AbstractArray, arr2) = arr1 * arr2
 mult(arr1::Vector, arr2) = transpose(transpose(arr1) * arr2)
 mult(arr1::Vector, arr2::Vector) = transpose(arr1) * arr2
 
@@ -384,7 +384,7 @@ end
 tensor_arith(x, y, ft) = LurTensor(ft(x.arr, y.arr), x.inds)
 
 commoninds(LT1, LT2; kw...) = inds_meet_cond(intersect, LT1, LT2; kw...)
-uniqueinds(LT1, LT2; kw...) = inds_meet_cond(setdiff, LT1, LT2; kw...)
+uniqueinds(LT1, LT2...; kw...) = inds_meet_cond(setdiff, LT1, LT2...; kw...)
 noncommoninds(LT1, LT2; kw...) = inds_meet_cond(symdiff, LT1, LT2; kw...)
 unioninds(LT1, LT2; kw...) = inds_meet_cond(union, LT1, LT2; kw...)
 inds(LT1::LurTensor; kw...) = inds_meet_cond(x -> x, LT1; kw...)
@@ -392,7 +392,7 @@ hascommoninds(LT1, LT2; kw...) = isempty(commoninds(LT1, LT2; kw))
 hascommoninds(LT1; kw...) = (LT2) -> hascommoninds(LT1, LT2; kw...)
 
 commonind(LT1, LT2; kw...) = first_elem(commoninds(LT1, LT2; kw...))
-uniqueind(LT1, LT2; kw...) = first_elem(uniqueinds(LT1, LT2; kw...))
+uniqueind(LT1, LT2...; kw...) = first_elem(uniqueinds(LT1, LT2...; kw...))
 noncommonind(LT1, LT2; kw...) = first_elem(noncommoninds(LT1, LT2; kw...))
 unionind(LT1, LT2; kw...) = first_elem(unioninds(LT1, LT2; kw...))
 ind(LT1::LurTensor; kw...) = first_elem(inds(LT1; kw...))
@@ -401,8 +401,8 @@ ind(LT1::LurTensor; kw...) = first_elem(inds(LT1; kw...))
 replacecommoninds!(L1, L2, ia) = replacecommoninds(L1, L2, Index(ia))
 function replacecommoninds!(L1, L2, ia)
 	commind = check_common_inds(L1, L2, "L1", "L2 in replacecommoninds!")
-	replaceinds!(L1, commind, ia)
-	replaceinds!(L2, commind, ia)
+	replaceind!(L1, commind, ia)
+	replaceind!(L2, commind, ia)
 end
 replaceinds!(LT::LurTensor, i1, i2) = replinds!(LT, get_map(i1, i2; bidir=false))
 swapinds!(LT::LurTensor, i1, i2) = replinds!(LT, get_map(i1, i2; bidir=true))
