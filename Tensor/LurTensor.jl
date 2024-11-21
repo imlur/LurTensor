@@ -196,7 +196,7 @@ swaptags!(LT::LurTensor, s1, s2; kw...) = modify!(LT, swap_tag, cd(kw), s1, s2)
 
 # Modify tags of LurTensor object (Copy version)
 removetags(LT::LurTensor, str; kw...) = modify(removetags!, LT, str; kw...)
-addtags(LT::LurTensor, str; kw...) = modify(addtags!, LT, str; kw)
+addtags(LT::LurTensor, str; kw...) = modify(addtags!, LT, str; kw...)
 settags(LT::LurTensor, str; kw...) = modify(settags!, LT, str; kw...)
 replacetags(LT::LurTensor, str1, str2; kw...) = modify(replacetags!, LT, str1, str2; kw...)
 swaptags(LT::LurTensor, str1, str2; kw...) = modify(swaptags!, LT, str1, str2; kw...)
@@ -473,8 +473,8 @@ LinearAlgebra.svdvals(LT::LurTensor, linds...; kw...) =
 LinearAlgebra.diag(LT::LurTensor) = LinearAlgebra.diag(LT.arr)
 
 # TODO: make methods for some classes of matrices
-eigen_(mat::Matrix; kw...) = (e = LinearAlgebra.eigen(mat); ([e.vectors, diagm(e.values), LinearAlgebra.inv(e.vectors)], 0))
-eigen_(mat::Hermitian; kw...) = (e = LinearAlgebra.eigen(mat); ([e.vectors, diagm(e.values), adjoint(e.vectors)], 0))
+eigen_(mat::Matrix; kw...) = (e = LinearAlgebra.eigen(mat); ([e.vectors, Diagonal(e.values), LinearAlgebra.inv(e.vectors)], 0))
+eigen_(mat::Hermitian; kw...) = (e = LinearAlgebra.eigen(mat); ([e.vectors, Diagonal(e.values), adjoint(e.vectors)], 0))
 qr_(mat::Matrix; kw...) = ((q, r) = LinearAlgebra.qr(mat); ([Matrix(q), r], 0))
 function svd_(mat::Matrix; kw...)
 	u, s, v = LinearAlgebra.svd(mat)
@@ -484,7 +484,7 @@ function svd_(mat::Matrix; kw...)
 	ti = findfirst(x -> x <= cutoff, s)
 	ti = ti == nothing ? length(s) : ti - 1
 	ti = min(nkeep, ti)
-	[u[:,1:ti], diagm(s[1:ti]), adjoint(v)[1:ti,:]], sum(s[ti+1:end].^2)
+	[u[:,1:ti], Diagonal(s[1:ti]), adjoint(v)[1:ti,:]], sum(s[ti+1:end].^2)
 end
 eigvals_(mat::Matrix) = (LinearAlgebra.eigvals(mat), 0)
 svdvals_(mat::Matrix) = (LinearAlgebra.svdvals(mat), 0)
@@ -544,4 +544,5 @@ include("../DMRG/DMRG_GS_1site.jl")
 include("../DMRG/DMRG_GS_2site.jl")
 include("../DMRG/DMRG_ES_1site.jl")
 include("../DMRG/iTEBD_GS_Vidal.jl")
+include("../DMRG/iTEBD_GS_Hastings.jl")
 

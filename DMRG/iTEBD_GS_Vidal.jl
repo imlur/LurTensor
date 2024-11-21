@@ -43,18 +43,21 @@ function iTEBD_GS_Vidal(l1, l2, g1, g2, H,
 
 		# Update odd bonds
 		g1, l1, g2 = updatebond(l2, g1, l1, g2, expH_forodd, osi; Nkeep)
-		Eodd, Eeven = getenergy(l2, g1, l1, g2, H_forodd, H_foreven)
+		Eodd, Eeven = getenergy(l2, g1, l1, g2, H_forodd, H_foreven, bonds)
 		l1 = l1 / norm(l1)
 		l2 = l2 / norm(l2)
 		Eiter[itN, 1, :] = [Eodd, Eeven]
 
 		# Update even bonds
 		g2, l2, g1 = updatebond(l1, g2, l2, g1, expH_foreven, esi; Nkeep)
-		Eodd, Eeven = getenergy(l2, g1, l1, g2, H_forodd, H_foreven)
+		Eodd, Eeven = getenergy(l2, g1, l1, g2, H_forodd, H_foreven, bonds)
 		l1 = l1 / norm(l1)
 		l2 = l2 / norm(l2)
 		Eiter[itN, 2, :] = [Eodd, Eeven]
 
+		if itN % 100 == 0
+			println("Iteration $(itN):\t $((Eodd + Eeven) / 2)")
+		end
 	end
 	
 	return (l1, l2, g1, g2), Eiter
@@ -71,7 +74,7 @@ function updatebond(ls, gl, lc, gr, expH, Hli; Nkeep=10)
 	grls = commonind(gr, ls); lsgl = commonind(ls, gl)
 	gllc = commonind(gl, lc); lcgr = commonind(lc, gr)
 
-	(U, nlc, V), _ = svd(totalprod, grls, Hli; Nkeep)
+	(U, nlc, V), _ = svd(totalprod, grls, Hli; Nkeep, cutoff=1e-8)
 	replacecommoninds!(U, nlc, gllc)
 	replacecommoninds!(V, nlc, lcgr)
 
@@ -82,34 +85,39 @@ function updatebond(ls, gl, lc, gr, expH, Hli; Nkeep=10)
 	return ngl, nlc, ngr
 end
 
-function getenergy(l2, g1, l1, g2, H_forodd, H_foreven)
-	Cnull = contract_iTEBD(l2, g1, l1, g2)
-	Codd = contract_iTEBD(l2, g1, l1, g2, H_forodd, 2)
-	Ceven = contract_iTEBD(l2, g1, l1, g2, H_foreven, 4)
+function getenergy(l2, g1, l1, g2, H_forodd, H_foreven, bonds)
+	Cnull = contract_iTEBD(l2, g1, l1, g2, bonds)
+	Codd = contract_iTEBD(l2, g1, l1, g2, H_forodd, 1, bonds)
+	Ceven = contract_iTEBD(l2, g1, l1, g2, H_foreven, 2, bonds)
 	return Codd / Cnull, Ceven / Cnull
 end
 
-contract_iTEBD(l2, g1, l1, g2) = 
-	contract_iTEBD(l2, g1, l1, g2, nothing, -10)
+contract_iTEBD(l2, g1, l1, g2, bonds) = 
+	contract_iTEBD(l2, g1, l1, g2, nothing, -10, bonds)
 
-function contract_iTEBD(l2, g1, l1, g2, lt, when)
-	seq = [l2, g1, l1, g2, l2, g1, l1]
+function contract_iTEBD(l2, g1, l1, g2, lt, when, bonds)
+	seq = [(l2 * g1) * l1, g2 * l2, g1 * l1]
 	ldi = commonind(l2, g2)
 	rdi = commonind(l1, g2)
-	l1sz = size(l1)[1]; l2sz = size(l2)[1]
+	l1sz = size(l1.arr)[1]
+	l2sz = size(l2.arr)[1]
 	LT = LurTensor(Matrix(I, l2sz, l2sz), ldi, ldi')
 	for i in 1:length(seq)
 		t = seq[i]
-		if i == when
-			LT = LT * (t * (lt * t'))
-		elseif i == when + 2
-			LT = (LT * t) * t'
-		elseif i % 2 == 0
-			sind = uniqueind(t, seq[i-1], seq[i+1])
-			LT = (LT * t) * replaceind(t', sind', sind)
+		if i == 3
+			tb = replaceind(t', rdi', rdi)
 		else
-			LT = (LT * t) * t'
+			tb = t'
+		end
+
+		if i == when
+			LT = ((LT * t) * tb) * lt
+		elseif i == when + 1
+			LT = (LT * t) * tb
+		else
+			sind = uniqueind(t, bonds)
+			LT = (LT * t) * replaceind(tb, sind', sind)
 		end
 	end
-	return value(LT * LurTensor(Matrix(I, l1sz, l1sz), rdi, rdi'))
+	return value(LT)
 end
