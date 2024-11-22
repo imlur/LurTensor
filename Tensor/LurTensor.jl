@@ -418,6 +418,14 @@ replaceind(LT::LurTensor, i1, i2) = replaceind!(shallow_copy(LT), i1, i2)
 swapind(LT::LurTensor, i1, i2) = swapind!(shallow_copy(LT), i1, i2)
 
 Base.conj(LT::LurTensor) = LurTensor(conj(LT.arr), LT.inds)
+function LinearAlgebra.inv(LT::LurTensor)
+	@assert ndims(LT) == 2
+	LurTensor(inv(LT.arr), LT.inds[2], LT.inds[1])
+end
+function LinearAlgebra.sqrt(LT::LurTensor)
+	@assert ndims(LT) == 2
+	LurTensor(sqrt(LT.arr), LT.inds...)
+end
 hconj(LT::LurTensor) = (@assert ndims(LT) == 2; 
 						conj(swapind(LT, LT.inds...)))
 Base.length(LT::LurTensor) = length(LT.arr)
@@ -446,6 +454,7 @@ end
 
 idx_list(A::LurTensor) = A.inds
 idx_list(v::Vector{Index}) = v
+idx_list(i::Index) = [i]
 
 inds_meet_cond(ft, LTs...; kw...) = 
 	inds_meet_cond(ft, map(idx_list, LTs)...; kw...)
@@ -545,4 +554,5 @@ include("../DMRG/DMRG_GS_2site.jl")
 include("../DMRG/DMRG_ES_1site.jl")
 include("../DMRG/iTEBD_GS_Vidal.jl")
 include("../DMRG/iTEBD_GS_Hastings.jl")
+include("../DMRG/Ortho_Orus.jl")
 

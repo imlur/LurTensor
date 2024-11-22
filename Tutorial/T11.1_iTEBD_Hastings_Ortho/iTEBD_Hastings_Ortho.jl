@@ -38,8 +38,8 @@ let
     p1 = plot!(Eeven[1:60] .- Eexact)
 	display(p1)
 
-	#Eaver = (Eodd + Eeven) / 2
-	#p2 = plot()
-	#p2 = plot!(Eaver .- Eexact, yaxis=:log)
-	#display(p2)
+	Eaver = (Eodd + Eeven) / 2
+	p2 = plot()
+	p2 = plot!(Eaver .- Eexact, yaxis=:log)
+	display(p2)
 end

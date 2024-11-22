@@ -69,6 +69,7 @@ function updatebond_hast(ll, bl, br, expH, Hli, clidx, cridx; Nkeep=10)
 	bl = replaceind(bl, llbl, llbl')
 
 	phi = (bl * br) * expH
+	llbr = commonind(phi, br)
 	leftind = uniqueind(ll, bl)
 	(U, nlc, nbr), _ = svd(noprime(ll * phi), leftind, Hli; Nkeep, cutoff=1e-8)
 	replacecommoninds!(U, nlc, clidx)
@@ -76,7 +77,7 @@ function updatebond_hast(ll, bl, br, expH, Hli, clidx, cridx; Nkeep=10)
 	
 	nlcnorm = norm(nlc)
 	phi /= nlcnorm; nlc /= nlcnorm
-	nbl = phi * replaceind(nbr, cridx, cridx')
+	nbl = phi * replaceind(nbr', llbr', llbr)
 	return noprime(nbl), nbr, nlc
 end
 
@@ -85,11 +86,41 @@ function getenergy_hast(l2::LurTensor, b1::LurTensor,
 						H_forodd::LurTensor, 
 						H_foreven::LurTensor, 
 						bonds::Vector{Index})
-	l1inv = LurTensor(inv(l1.arr), l1.inds)
-	l2inv = LurTensor(inv(l2.arr), l2.inds)
-	g1 = b1 * l1inv; g2 = b2 * l2inv
-	Cnull = contract_iTEBD(l2, g1, l1, g2, bonds)
-	Codd = contract_iTEBD(l2, g1, l1, g2, H_forodd, 1, bonds)
-	Ceven = contract_iTEBD(l2, g1, l1, g2, H_foreven, 2, bonds)
+	#l1inv = LurTensor(inv(l1.arr), l1.inds)
+	#l2inv = LurTensor(inv(l2.arr), l2.inds)
+	#g1 = b1 * l1inv; g2 = b2 * l2inv
+	Cnull = contract_iTEBDH(l2, b1, l1, b2, bonds)
+	Codd = contract_iTEBDH(l2, b1, l1, b2, H_forodd, 1, bonds)
+	Ceven = contract_iTEBDH(l2, b1, l1, b2, H_foreven, 2, bonds)
 	return Codd / Cnull, Ceven / Cnull
+end
+
+contract_iTEBDH(l2, b1, l1, b2, bonds) = 
+	contract_iTEBDH(l2, b1, l1, b2, nothing, -10, bonds)
+
+function contract_iTEBDH(l2, b1, l1, b2, lt, when, bonds)
+	seq = [l2 * b1, b2, b1]
+	ldi = uniqueind(l2, b2)
+	rdi = commonind(l1, b2)
+	l1sz = size(l1.arr)[1]
+	l2sz = size(l2.arr)[1]
+	LT = LurTensor(Matrix(I, l2sz, l2sz), ldi, ldi')
+	for i in 1:length(seq)
+		t = seq[i]
+		if i == 3
+			tb = replaceind(t', rdi', rdi)
+		else
+			tb = t'
+		end
+
+		if i == when
+			LT = ((LT * t) * tb) * lt
+		elseif i == when + 1
+			LT = (LT * t) * tb
+		else
+			sind = uniqueind(t, bonds)
+			LT = (LT * t) * replaceind(tb, sind', sind)
+		end
+	end
+	return value(LT)
 end
