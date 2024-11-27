@@ -15,6 +15,7 @@ Index(ind::Index) = Index(ind.tag, ind.plev)
 Index(t::Tuple{String, Int}) = Index(t[1], t[2])
 Index(s::String) = Index(s, 0)
 
+to_indvec(v::Vector{Index}) = v
 to_indvec(tps::Vector{Tuple{String, Int}}) = [Index(t) for t in tps]
 to_indvec(ks::Vector{String}, ps::Vector{Int}) = to_indvec(collect(zip(ks, ps)))
 to_indvec(ks::Vector{String}) = to_indvec(ks, [0 for _=1:length(ks)])
@@ -124,12 +125,18 @@ cond_kwargs = (tag=nothing, plev=nothing)
 # Condition Function
 function cd(kw)
 	for k in keys(kw)
-		if !(k in (:tag, :plev)) error("Keyword argument $(k) is not supported") end
+		if !(k in (:tag, :plev, :inds)) 
+			error("Keyword argument $(k) is not supported") 
+		end
 	end
-	t = get(kw, :tag, nothing); p = get(kw, :plev, nothing)
-	(ind::Index) -> check(ind.tag, t) && check(ind.plev, p)
+	t = get(kw, :tag, nothing)
+	p = get(kw, :plev, nothing)
+	i = get(kw, :inds, nothing)
+	(ind::Index) -> check(ind.tag, t) && check(ind.plev, p) && check(ind, i)
 end
 
+check(i1::Index, i2::Index) = i1 == i2
+check(i1::Index, vi::Vector{Index}) = any(x -> check(i1, x), vi)
 check(tag::String, str::String) = all(x -> x in split(tag, ','), split(str, ','))
 check(plev::Int, i::Int) = plev == i
 check(::Any, ::Nothing) = true
@@ -398,7 +405,7 @@ unionind(LT1, LT2; kw...) = first_elem(unioninds(LT1, LT2; kw...))
 ind(LT1::LurTensor; kw...) = first_elem(inds(LT1; kw...))
 
 # tested only for reaplceinds! function
-replacecommoninds!(L1, L2, ia) = replacecommoninds(L1, L2, Index(ia))
+replacecommoninds!(L1, L2, ia) = replacecommoninds!(L1, L2, Index(ia))
 function replacecommoninds!(L1, L2, ia)
 	commind = check_common_inds(L1, L2, "L1", "L2 in replacecommoninds!")
 	replaceind!(L1, commind, ia)
@@ -555,4 +562,5 @@ include("../DMRG/DMRG_ES_1site.jl")
 include("../DMRG/iTEBD_GS_Vidal.jl")
 include("../DMRG/iTEBD_GS_Hastings.jl")
 include("../DMRG/Ortho_Orus.jl")
+include("../DMRG/tDMRG.jl")
 
