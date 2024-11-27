@@ -22,8 +22,8 @@ LurTensor 튜토리얼
 일단 LurTensor 객체를 구성할 array를 만들어봅시다. rand(2, 3, 4)는 [0, 1] uniform distribution에서 나온 랜덤 값으로 2 * 3 * 4 크기의 3차원 array를 반환합니다.
 
 ``` julia
-  julia> arr = rand(2, 3, 4)
-  2×3×4 Array{Float64, 3}:
+julia> arr = rand(2, 3, 4)
+2×3×4 Array{Float64, 3}:
 [:, :, 1] =
  0.999229  0.825692  0.507359
  0.461738  0.869754  0.622563
